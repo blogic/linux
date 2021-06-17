@@ -134,7 +134,6 @@
 		status = "okay";
 	};
 
-
 	pcie: pcie@1a140000 {
 		compatible = "econet,en7523-pcie", "mediatek,mt7622-pcie";
 		device_type = "pci";
