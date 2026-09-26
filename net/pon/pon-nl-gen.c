@@ -86,12 +86,14 @@ static const struct nla_policy pon_gem_get_dump_nl_policy[PON_A_GEM_DEV_ID + 1] 
 };
 
 /* PON_CMD_GEM_NEW - do */
-static const struct nla_policy pon_gem_new_nl_policy[PON_A_GEM_KEY_RING + 1] = {
+static const struct nla_policy pon_gem_new_nl_policy[PON_A_GEM_NO_OFFLOAD + 1] = {
 	[PON_A_GEM_DEV_ID] = NLA_POLICY_MIN(NLA_U32, 1),
 	[PON_A_GEM_ID] = NLA_POLICY_FULL_RANGE(NLA_U32, &pon_a_gem_id_range),
 	[PON_A_GEM_DIR] = NLA_POLICY_RANGE(NLA_U32, 1, 3),
 	[PON_A_GEM_TCONT_INDEX] = NLA_POLICY_FULL_RANGE(NLA_U32, &pon_a_gem_tcont_index_range),
 	[PON_A_GEM_KEY_RING] = NLA_POLICY_MAX(NLA_U32, 3),
+	[PON_A_GEM_QUEUE] = NLA_POLICY_MAX(NLA_U32, 7),
+	[PON_A_GEM_NO_OFFLOAD] = NLA_POLICY_MAX(NLA_U8, 1),
 };
 
 /* PON_CMD_GEM_DEL - do */
@@ -256,7 +258,7 @@ static const struct genl_split_ops pon_nl_ops[] = {
 		.doit		= pon_nl_gem_new_doit,
 		.post_doit	= pon_device_unlock,
 		.policy		= pon_gem_new_nl_policy,
-		.maxattr	= PON_A_GEM_KEY_RING,
+		.maxattr	= PON_A_GEM_NO_OFFLOAD,
 		.flags		= GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
 	},
 	{

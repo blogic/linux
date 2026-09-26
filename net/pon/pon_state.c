@@ -397,6 +397,14 @@ int pon_dev_state_report(struct pon_dev *pdev, enum pon_ploam_state state)
 		    pon_dev_state_name(pdev, state));
 	pon_dev_lods_count(pdev, old, state);
 
+	/* Every activation edge invalidates what a forwarding engine holds:
+	 * the alloc-ids go with the link and the OLT may bind the T-CONTs to
+	 * other channels than before. Deferred, because the PLOAM
+	 * acknowledgment of the message that moved the state waits behind this
+	 * call.
+	 */
+	pon_offload_flush_sched(pdev);
+
 	/* Carrier before the notification, so a daemon that reads both sees a
 	 * netdev that agrees with the state. rtnetlink and generic netlink
 	 * have no ordering between them, so this is best effort.
@@ -423,6 +431,11 @@ EXPORT_SYMBOL_GPL(pon_dev_state_report);
  * tcont-dealloc event means the driver released the channel: the carrier
  * may fall and the scheduler waits for the next tcont-alloc. An event that
  * arrives once pon_dev_unregister() has begun is dropped.
+ *
+ * A tcont-dealloc event also drops the offloaded flows, in the instance's
+ * context afterwards, because the released channel may carry another
+ * alloc-id next. A tcont-alloc event drops none: no flow was offloaded onto
+ * an alloc-id without a channel.
  */
 void pon_dev_event(struct pon_dev *pdev, const struct pon_event *ev)
 {
@@ -435,6 +448,7 @@ void pon_dev_event(struct pon_dev *pdev, const struct pon_event *ev)
 		pon_dev_carrier_update(pdev);
 		pon_tc_alloc_bound(pdev, ev->alloc_id);
 	} else if (ev->type == PON_EVENT_TYPE_TCONT_DEALLOC) {
+		pon_offload_flush_sched(pdev);
 		pon_dev_carrier_update(pdev);
 		pon_tc_alloc_unbound(pdev, ev->alloc_id);
 	}

@@ -144,6 +144,11 @@ struct net_device *pon_conduit_hold(struct pon_dev *pdev,
 int pon_conduit_setup_tc(struct pon_dev *pdev, unsigned int channel,
 			 enum tc_setup_type type, void *type_data,
 			 bool *paired);
+int pon_flow_block_setup(struct pon_dev *pdev,
+			 struct flow_block_offload *offload);
+void pon_conduit_flow_flush(struct pon_dev *pdev, u16 gem);
+void pon_offload_init(struct pon_dev *pdev);
+void pon_offload_flush_sched(struct pon_dev *pdev);
 
 void pon_tc_rebind(struct pon_dev *pdev);
 void pon_tc_alloc_bound(struct pon_dev *pdev, u32 alloc_id);

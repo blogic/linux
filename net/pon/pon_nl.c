@@ -1014,6 +1014,8 @@ int pon_nl_tcont_set_doit(struct sk_buff *skb, struct genl_info *info)
 			goto err_restore_tcont;
 	}
 
+	pon_conduit_flow_flush(pdev, PON_GEM_ANY);
+
 	tcont->cfg = cfg;
 	if (is_new) {
 		list_add_tail(&tcont->list, &pdev->tconts);
@@ -1184,6 +1186,7 @@ int pon_nl_tcont_del_doit(struct sk_buff *skb, struct genl_info *info)
 	if (err)
 		return err;
 
+	pon_conduit_flow_flush(pdev, PON_GEM_ANY);
 	pon_nl_notify_tcont(pdev, tcont, PON_CMD_TCONT_DEL_NTF);
 
 	pon_tc_tcont_release(pdev, tcont);
@@ -1230,7 +1233,9 @@ static bool pon_gem_cfg_same(const struct pon_gem_cfg *existing,
 	       existing->tcont_valid == requested->tcont_valid &&
 	       existing->tcont_index == requested->tcont_index &&
 	       existing->alloc_id == requested->alloc_id &&
-	       existing->key_ring == requested->key_ring;
+	       existing->key_ring == requested->key_ring &&
+	       existing->queue == requested->queue &&
+	       existing->no_offload == requested->no_offload;
 }
 
 /**
@@ -1288,6 +1293,11 @@ int pon_nl_gem_new_doit(struct sk_buff *skb, struct genl_info *info)
 				    "broadcast keys are not supported");
 		return -EOPNOTSUPP;
 	}
+	if (info->attrs[PON_A_GEM_QUEUE])
+		cfg.queue = nla_get_u32(info->attrs[PON_A_GEM_QUEUE]);
+	if (info->attrs[PON_A_GEM_NO_OFFLOAD])
+		cfg.no_offload =
+			!!nla_get_u8(info->attrs[PON_A_GEM_NO_OFFLOAD]);
 
 	if (cfg.tcont_valid) {
 		struct pon_tcont *tcont;
@@ -1329,6 +1339,8 @@ int pon_nl_gem_new_doit(struct sk_buff *skb, struct genl_info *info)
 
 	gem->cfg = cfg;
 	list_add_tail(&gem->list, &pdev->gems);
+	if (cfg.no_offload)
+		pon_conduit_flow_flush(pdev, PON_GEM_ANY);
 	pon_nl_obj_gen_inc();
 	pon_dev_carrier_update(pdev);
 	pon_nl_notify_gem(pdev, gem, PON_CMD_GEM_ADD_NTF);
@@ -1377,6 +1389,7 @@ int pon_nl_gem_del_doit(struct sk_buff *skb, struct genl_info *info)
 	if (err)
 		return err;
 
+	pon_conduit_flow_flush(pdev, gem_id);
 	pon_nl_notify_gem(pdev, gem, PON_CMD_GEM_DEL_NTF);
 
 	list_del(&gem->list);
@@ -1412,7 +1425,9 @@ pon_nl_gem_fill(struct pon_dev *pdev, struct pon_gem *gem,
 	if (nla_put_u32(rsp, PON_A_GEM_DEV_ID, pdev->id) ||
 	    nla_put_u32(rsp, PON_A_GEM_ID, cfg->id) ||
 	    nla_put_u32(rsp, PON_A_GEM_DIR, cfg->dir) ||
-	    nla_put_u32(rsp, PON_A_GEM_KEY_RING, cfg->key_ring))
+	    nla_put_u32(rsp, PON_A_GEM_KEY_RING, cfg->key_ring) ||
+	    nla_put_u32(rsp, PON_A_GEM_QUEUE, cfg->queue) ||
+	    nla_put_u8(rsp, PON_A_GEM_NO_OFFLOAD, cfg->no_offload))
 		goto err_cancel_msg;
 
 	if (cfg->tcont_valid &&
@@ -1570,6 +1585,8 @@ int pon_nl_gem_map_new_doit(struct sk_buff *skb, struct genl_info *info)
 	if (err)
 		goto err_free_map;
 
+	pon_conduit_flow_flush(pdev, PON_GEM_ANY);
+
 	map->cfg = cfg;
 	if (is_new) {
 		list_add_tail(&map->list, &pdev->gem_maps);
@@ -1622,6 +1639,7 @@ int pon_nl_gem_map_del_doit(struct sk_buff *skb, struct genl_info *info)
 	if (err)
 		return err;
 
+	pon_conduit_flow_flush(pdev, PON_GEM_ANY);
 	pon_nl_notify_gem_map(pdev, map, PON_CMD_GEM_MAP_DEL_NTF);
 	list_del(&map->list);
 	kfree(map);

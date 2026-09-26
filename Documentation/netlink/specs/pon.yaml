@@ -321,6 +321,28 @@ attribute-sets:
           (bcast-key-set).
         type: u32
         enum: gem-key-ring
+      -
+        name: queue
+        doc: |
+          Transmit queue of the GEM port within its T-CONT, which the OMCI
+          priority queue the GEM port points at selects. It is the queue a
+          frame of this GEM port is scheduled on, so a forwarding engine that
+          sends the frames without the host puts them on the same one.
+          Absent means queue 0.
+        type: u32
+        checks:
+          max: 7
+      -
+        name: no-offload
+        doc: |
+          The frames of this GEM port are rewritten or dropped on their way
+          out by rules the kernel does not hold, so no flow of this GEM port
+          may be offloaded to a forwarding engine. Set it for a GEM port
+          whose service needs a tagging or filtering operation that the
+          classifier rules of this family do not describe.
+        type: u8
+        checks:
+          max: 1
   -
     name: gem-map
     attributes:
@@ -852,6 +874,8 @@ operations:
             - dir
             - tcont-index
             - key-ring
+            - queue
+            - no-offload
         pre: pon-device-get-locked
         post: pon-device-unlock
       dump:
@@ -874,6 +898,8 @@ operations:
             - dir
             - tcont-index
             - key-ring
+            - queue
+            - no-offload
         pre: pon-device-get-locked
         post: pon-device-unlock
     -

@@ -7,6 +7,7 @@
 #include <linux/property.h>
 #include <linux/rtnetlink.h>
 #include <linux/slab.h>
+#include <net/flow_offload.h>
 #include <net/pon.h>
 
 #include "pon.h"
@@ -26,6 +27,8 @@ struct pon_conduit {
 
 /* guarded by pon_devs_lock */
 static LIST_HEAD(pon_conduits);
+
+static LIST_HEAD(pon_flow_block_cb_list);
 
 /**
  * pon_conduit_find() - look up the conduit of a network device
@@ -488,6 +491,138 @@ int pon_conduit_setup_tc(struct pon_dev *pdev, unsigned int channel,
 	netdev_put(conduit, &tracker);
 
 	return err;
+}
+
+/**
+ * pon_flow_block_cb() - hand one flow of a PON interface to the conduit
+ * @type:	what the flow block is setting up
+ * @type_data:	the flow's offload parameters
+ * @cb_priv:	the PON device structure the block was bound for
+ *
+ * The flow block callback of the core. It looks up the conduit the instance
+ * has now and calls the flow_setup callback of the conduit's driver.
+ *
+ * Return: 0, -ENETDOWN without a conduit, -EOPNOTSUPP when the conduit's
+ * driver offloads no flow, or what the conduit's driver answered.
+ */
+static int pon_flow_block_cb(enum tc_setup_type type, void *type_data,
+			     void *cb_priv)
+{
+	const struct pon_conduit_ops *ops;
+	struct pon_dev *pdev = cb_priv;
+	struct net_device *conduit;
+	netdevice_tracker tracker;
+	int err;
+
+	conduit = pon_conduit_hold(pdev, &ops, &tracker);
+	if (!conduit)
+		return -ENETDOWN;
+
+	err = ops->flow_setup ? ops->flow_setup(conduit, type, type_data) :
+				-EOPNOTSUPP;
+	netdev_put(conduit, &tracker);
+
+	return err;
+}
+
+/**
+ * pon_flow_block_release() - release a flow block callback of the core
+ * @cb_priv:	the PON device structure the block was bound for
+ *
+ * Drops the reference on the instance that pon_flow_block_setup() took
+ * when it bound the block.
+ */
+static void pon_flow_block_release(void *cb_priv)
+{
+	pon_dev_put(cb_priv);
+}
+
+/**
+ * pon_flow_block_setup() - bind or unbind a flow block of a PON interface
+ * @pdev:	PON device structure
+ * @offload:	the block and the command
+ *
+ * The frames of every PON interface leave through the conduit, so the
+ * engine that offloads their flows is the conduit's. The block holds a
+ * callback of the core, never one of the conduit's driver. The callback
+ * hands each flow to the conduit the instance has at that moment. A conduit
+ * can go while a flow table is bound, so nothing of its driver may stay
+ * behind in the block.
+ *
+ * Return: 0, -EOPNOTSUPP for a binder other than clsact ingress, -ENOENT
+ * for an unbind of a block that was not bound, or a negative errno.
+ */
+int pon_flow_block_setup(struct pon_dev *pdev,
+			 struct flow_block_offload *offload)
+{
+	struct flow_block_cb *block_cb;
+
+	if (offload->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS)
+		return -EOPNOTSUPP;
+
+	offload->driver_block_list = &pon_flow_block_cb_list;
+
+	switch (offload->command) {
+	case FLOW_BLOCK_BIND:
+		block_cb = flow_block_cb_lookup(offload->block,
+						pon_flow_block_cb, pdev);
+		if (block_cb) {
+			flow_block_cb_incref(block_cb);
+			return 0;
+		}
+
+		block_cb = flow_block_cb_alloc(pon_flow_block_cb, pdev, pdev,
+					       pon_flow_block_release);
+		if (IS_ERR(block_cb))
+			return PTR_ERR(block_cb);
+
+		pon_dev_get(pdev);
+		flow_block_cb_incref(block_cb);
+		flow_block_cb_add(block_cb, offload);
+		list_add_tail(&block_cb->driver_list, &pon_flow_block_cb_list);
+		return 0;
+	case FLOW_BLOCK_UNBIND:
+		block_cb = flow_block_cb_lookup(offload->block,
+						pon_flow_block_cb, pdev);
+		if (!block_cb)
+			return -ENOENT;
+
+		if (!flow_block_cb_decref(block_cb)) {
+			flow_block_cb_remove(block_cb, offload);
+			list_del(&block_cb->driver_list);
+		}
+		return 0;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+/**
+ * pon_conduit_flow_flush() - drop the offloaded flows of a GEM port
+ * @pdev:	PON device structure
+ * @gem:	the GEM port id, or PON_GEM_ANY for every GEM port
+ *
+ * Nothing the conduit's engine holds about a GEM port outlives the GEM port
+ * itself, so the core tells it when one goes, when the rules that select one
+ * change, when a GEM port that refuses offload appears, when an alloc-id is
+ * released and when the link returns with its T-CONTs bound anew.
+ *
+ * Context: Called with @pdev->lock held.
+ */
+void pon_conduit_flow_flush(struct pon_dev *pdev, u16 gem)
+{
+	const struct pon_conduit_ops *ops;
+	struct net_device *conduit;
+	netdevice_tracker tracker;
+
+	conduit = pon_conduit_hold(pdev, &ops, &tracker);
+	if (!conduit)
+		return;
+
+	if (ops->flow_flush)
+		ops->flow_flush(conduit, gem);
+
+	netdev_put(conduit, &tracker);
 }
 
 /**

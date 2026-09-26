@@ -83,6 +83,10 @@ int pon_conduit_mtu_set(struct pon_dev *pdev, const struct net_device *dev,
 			unsigned int mtu);
 int pon_dev_setup_tc(struct pon_dev *pdev, enum tc_setup_type type,
 		     void *type_data);
+int pon_netdev_info_get(struct net_device *dev, const struct pon_flow_key *key,
+			struct pon_netdev_info *info);
+bool pon_netdev_offload_blocked(struct net_device *dev);
+
 /**
  * netdev_uses_pon() - whether a network device belongs to a PON MAC
  * @dev: the network device
@@ -154,6 +158,48 @@ static inline bool netdev_uses_pon(const struct net_device *dev)
 	return false;
 }
 
+/**
+ * pon_netdev_info_get() - where an offloaded flow leaving a PON device goes
+ * @dev: the network device
+ * @key: the flow as the upstream classifier matches it
+ * @info: left untouched
+ *
+ * The stub for a kernel without CONFIG_PON.
+ *
+ * Return: -ENODEV, @dev is not a PON network device.
+ */
+static inline int pon_netdev_info_get(struct net_device *dev,
+				      const struct pon_flow_key *key,
+				      struct pon_netdev_info *info)
+{
+	return -ENODEV;
+}
+
+/**
+ * pon_netdev_offload_blocked() - whether a device's flows must stay in software
+ * @dev: the network device
+ *
+ * The stub for a kernel without CONFIG_PON.
+ *
+ * Return: false.
+ */
+static inline bool pon_netdev_offload_blocked(struct net_device *dev)
+{
+	return false;
+}
+
 #endif /* CONFIG_PON */
+
+/**
+ * pon_netdev_info_put() - release what pon_netdev_info_get() filled in
+ * @info: the answer, which no longer holds a reference afterwards
+ *
+ * Drops the reference on @info->conduit and clears it.
+ */
+static inline void pon_netdev_info_put(struct pon_netdev_info *info)
+{
+	netdev_put(info->conduit, &info->tracker);
+	info->conduit = NULL;
+}
 
 #endif /* __NET_PON_FUNCTIONS_H */

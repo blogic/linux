@@ -16,6 +16,7 @@
 #include <net/pon/ploam.h>
 #include <uapi/linux/pon.h>
 
+struct flow_block_offload;
 struct net_device;
 struct netlink_ext_ack;
 struct pon_conduit;
@@ -28,6 +29,9 @@ struct sk_buff;
 #define PON_LOG_LINE_LEN	64
 #define PON_ALARM_COUNT		(PON_ALARM_LODS + 1)
 #define PON_TX_CHANNELS		(U8_MAX + 1)
+
+/* Every GEM port, where one GEM port id is asked for. 65535 is never one. */
+#define PON_GEM_ANY		0xffff
 
 typedef void (*pon_work_func_t)(struct pon_dev *pdev, struct pon_work *work);
 
@@ -114,8 +118,14 @@ struct pon_tcont_cfg {
  *	@tcont_valid is false
  * @key_ring: encryption key ring, enum pon_gem_key_ring (ITU-T G.988
  *	clause 9.2.3), never broadcast
+ * @queue: transmit queue within the T-CONT, which the OMCI priority queue the
+ *	GEM port points at selects. A forwarding engine sending these frames
+ *	without the host uses the same one
  * @tcont_valid: @tcont_index carries a value. A downstream broadcast GEM
  *	carries none
+ * @no_offload: the frames of this GEM port are rewritten or dropped on their
+ *	way out by rules the kernel does not hold, so no flow of this GEM port
+ *	may be offloaded
  */
 struct pon_gem_cfg {
 	u16 id;
@@ -123,7 +133,9 @@ struct pon_gem_cfg {
 	u16 tcont_index;
 	u16 alloc_id;
 	enum pon_gem_key_ring key_ring;
+	u8 queue;
 	bool tcont_valid;
+	bool no_offload;
 };
 
 /**
@@ -151,6 +163,50 @@ struct pon_gem_map_cfg {
 	bool vid_valid;
 	bool pbit_valid;
 	bool dscp_valid;
+};
+
+/**
+ * struct pon_flow_key - what the upstream classifier matches a flow on
+ * @vid: outer VLAN ID, valid when @vid_valid
+ * @tagged: the flow leaves the ONU tagged
+ * @pbit: outer VLAN priority, valid when @pbit_valid
+ * @dscp: IP DSCP, valid when @dscp_valid
+ * @vid_valid: @vid carries a value
+ * @pbit_valid: @pbit carries a value
+ * @dscp_valid: @dscp carries a value
+ *
+ * The members of struct pon_gem_map_cfg that a rule matches on, read from a
+ * flow rule rather than from a frame. @tagged is always valid: a flow either
+ * pushes a tag or it does not.
+ */
+struct pon_flow_key {
+	u16 vid;
+	bool tagged;
+	u8 pbit;
+	u8 dscp;
+	bool vid_valid;
+	bool pbit_valid;
+	bool dscp_valid;
+};
+
+/**
+ * struct pon_netdev_info - where the frames of a PON network device go
+ * @conduit: the ethernet device whose rings carry them, referenced until
+ *	     pon_netdev_info_put()
+ * @tracker: the reference held on @conduit
+ * @gem: the GEM port id they ride
+ * @channel: the conduit transmit channel that GEM port's T-CONT is bound to
+ * @queue: the transmit queue within that channel
+ *
+ * The values the transmit path stamps into a descriptor, answered for a whole
+ * flow rather than for one frame.
+ */
+struct pon_netdev_info {
+	struct net_device *conduit;
+	netdevice_tracker tracker;
+	u16 gem;
+	u8 channel;
+	u8 queue;
 };
 
 /**
@@ -397,12 +453,32 @@ struct pon_rx_info {
  *	      are what ndo_setup_tc was given. The channel is the one the
  *	      MAC driver named through its tcont_channel callback. Called with
  *	      rtnl and the instance lock held.
+ * @flow_setup: offload one flow of a PON network device, optional. @type
+ *	        and @type_data are what a flow block callback is given. The
+ *	        core binds the block and calls this for each flow, with the
+ *	        conduit the instance has then, so nothing of the conduit's
+ *	        driver stays in a block when the conduit goes. Without it no
+ *	        flow of a PON interface is offloaded.
  */
 struct pon_conduit_ops {
 	netdev_tx_t (*xmit)(struct net_device *conduit, struct sk_buff *skb,
 			    const struct pon_tx_info *info);
 	int (*setup_tc)(struct net_device *conduit, unsigned int channel,
 			enum tc_setup_type type, void *type_data);
+	int (*flow_setup)(struct net_device *conduit, enum tc_setup_type type,
+			  void *type_data);
+
+	/**
+	 * @flow_flush: drop the offloaded flows of one GEM port, or of every
+	 *		GEM port when @gem is PON_GEM_ANY, optional. A GEM port
+	 *		that goes, a classifier rule that changes and a link
+	 *		that returns with its T-CONTs bound to other channels
+	 *		all leave bound flows naming something the ONU no
+	 *		longer means. Called with the instance lock held, so it
+	 *		must not take a lock that its driver holds around a call
+	 *		of pon_netdev_info_get(), which takes the instance lock.
+	 */
+	void (*flow_flush)(struct net_device *conduit, u16 gem);
 };
 
 /**
@@ -433,6 +509,11 @@ struct pon_conduit_ops {
  *	    with atomic bit operations so that a driver may report from any
  *	    context
  * @alarm_work: publishes @alarms once the instance's context is available
+ * @flow_flush_work: drops the offloaded flows after an activation edge or a
+ *		     released alloc-id. It is deferred for two reasons: both
+ *		     are reported from the middle of the PLOAM exchange that
+ *		     caused them. The conduit's engine may take a while to
+ *		     answer
  * @omci_portid: netlink port id of the socket that owns the OMCI channel, 0
  *		 when none does, changed with cmpxchg, because a socket that
  *		 closes gives it up without the lock
@@ -531,6 +612,7 @@ struct pon_dev {
 	spinlock_t work_lock;
 
 	struct pon_work alarm_work;
+	struct pon_work flow_flush_work;
 	u32 omci_portid;
 	struct sk_buff_head omci_rxq;
 	struct pon_work omci_rx_work;
@@ -740,6 +822,18 @@ struct pon_dev_ops {
 	int (*gem_map_del)(struct pon_dev *pdev,
 			   const struct pon_gem_map_cfg *cfg,
 			   struct netlink_ext_ack *extack);
+
+	/**
+	 * @gem_resolve: the GEM port the classifier picks for a flow, optional.
+	 *		 The driver answers from the rules it matches frames
+	 *		 with, so that an offloaded flow takes the GEM port its
+	 *		 own frames would have taken. Return 0, or -ENOENT when
+	 *		 no rule takes the flow. Without it only a GEM network
+	 *		 device can be the egress of an offloaded flow. Instance
+	 *		 lock held.
+	 */
+	int (*gem_resolve)(struct pon_dev *pdev, const struct pon_flow_key *key,
+			   u16 *gem_id);
 
 	/**
 	 * @msk_set: take the master session key of an OMCI authentication

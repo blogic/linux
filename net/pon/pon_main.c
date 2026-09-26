@@ -251,6 +251,7 @@ struct pon_dev *pon_dev_create(struct net_device *netdev,
 	pon_log_init(pdev);
 	pon_fec_init(pdev);
 	pon_pcs_init(pdev);
+	pon_offload_init(pdev);
 	refcount_set(&pdev->refcnt, 1);
 
 	/* Ordered, so that the work items run one at a time and in the order

@@ -234,6 +234,14 @@ static int pon_tc_ets(struct pon_dev *pdev, struct tc_ets_qopt_offload *opt)
  * The qdisc layer calls ndo_setup_tc for an ETS qdisc only when the device
  * advertises NETIF_F_HW_TC, so the driver sets it on the data interface.
  *
+ * A flowtable block goes to the conduit instead, because the flows it
+ * offloads leave through the conduit's rings. The instance lock is not held
+ * for that: the conduit's driver takes its own locks and this path runs the
+ * other way round from the qdisc one. A clsact block stays here, because the
+ * filters on the data interface are the software path that a bound flow is
+ * meant to skip. The conduit's driver would also read them as its own
+ * port's.
+ *
  * Return: 0, -EOPNOTSUPP for a qdisc or a position that is not offloaded,
  * -ENOENT when no T-CONT has that index, or the driver's errno.
  */
@@ -241,6 +249,9 @@ int pon_dev_setup_tc(struct pon_dev *pdev, enum tc_setup_type type,
 		     void *type_data)
 {
 	int err;
+
+	if (type == TC_SETUP_FT)
+		return pon_flow_block_setup(pdev, type_data);
 
 	if (type != TC_SETUP_QDISC_ETS)
 		return -EOPNOTSUPP;

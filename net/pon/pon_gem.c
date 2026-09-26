@@ -77,6 +77,37 @@ static netdev_tx_t pon_gem_xmit(struct sk_buff *skb, struct net_device *dev)
 }
 
 /**
+ * pon_gem_setup_tc() - offload tc configuration of a GEM interface
+ * @dev:	the GEM network device
+ * @type:	what tc is setting up
+ * @type_data:	the offload parameters
+ *
+ * Implements ndo_setup_tc. A GEM interface offloads no qdisc of its own: its
+ * frames ride the T-CONT whose scheduler the data interface's queues carry.
+ * A flowtable block is the conduit's business and the conduit answers for
+ * every PON interface. A clsact block is not: the filters on a PON interface
+ * are the software path that a bound flow is meant to skip. The conduit's
+ * driver would also read them as its own port's.
+ *
+ * Return: what pon_flow_block_setup() returns for a flowtable block, or
+ * -EOPNOTSUPP for anything else and before the interface is attached.
+ */
+static int pon_gem_setup_tc(struct net_device *dev, enum tc_setup_type type,
+			    void *type_data)
+{
+	struct pon_gem_priv *priv = netdev_priv(dev);
+
+	if (type != TC_SETUP_FT)
+		return -EOPNOTSUPP;
+
+	/* The interface is registered before it is attached to its device. */
+	if (!priv->pdev)
+		return -EOPNOTSUPP;
+
+	return pon_flow_block_setup(priv->pdev, type_data);
+}
+
+/**
  * pon_gem_get_iflink() - the link of a GEM interface
  * @dev:	the GEM network device
  *
@@ -128,6 +159,7 @@ static const struct net_device_ops pon_gem_netdev_ops = {
 	.ndo_change_mtu		= pon_gem_change_mtu,
 	.ndo_set_mac_address	= eth_mac_addr,
 	.ndo_validate_addr	= eth_validate_addr,
+	.ndo_setup_tc		= pon_gem_setup_tc,
 	.ndo_get_iflink		= pon_gem_get_iflink,
 };
 
@@ -186,6 +218,8 @@ static void pon_gem_dev_setup(struct net_device *dev)
 	dev->lltx = true;
 	dev->netns_immutable = true;
 	dev->max_mtu = ETH_MAX_MTU;
+	dev->hw_features |= NETIF_F_HW_TC;
+	dev->features |= NETIF_F_HW_TC;
 }
 
 /**
