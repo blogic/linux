@@ -20,6 +20,7 @@
 #include <linux/phy/phy-hdmi.h>
 #include <linux/phy/phy-lvds.h>
 #include <linux/phy/phy-mipi-dphy.h>
+#include <linux/phy/phy-pon.h>
 
 struct phy;
 
@@ -45,6 +46,7 @@ enum phy_mode {
 	PHY_MODE_LVDS,
 	PHY_MODE_DP,
 	PHY_MODE_HDMI,
+	PHY_MODE_PON,
 };
 
 enum phy_media {
@@ -73,12 +75,15 @@ union phy_notify {
  *		the LVDS phy mode.
  * @hdmi:	Configuration set applicable for phys supporting
  *		the HDMI phy mode.
+ * @pon:	Configuration set applicable for phys supporting
+ *		the PON phy mode.
  */
 union phy_configure_opts {
 	struct phy_configure_opts_mipi_dphy	mipi_dphy;
 	struct phy_configure_opts_dp		dp;
 	struct phy_configure_opts_lvds		lvds;
 	struct phy_configure_opts_hdmi		hdmi;
+	struct phy_configure_opts_pon		pon;
 };
 
 /**
