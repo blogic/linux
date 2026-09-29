@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2026 John Crispin <john@phrozen.org> */
 
+#include <kunit/visibility.h>
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/timer.h>
@@ -217,3 +218,4 @@ void pon_work_drain(struct pon_dev *pdev)
 	}
 	spin_unlock_irqrestore(&pdev->work_lock, flags);
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_work_drain);

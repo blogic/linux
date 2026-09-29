@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2026 John Crispin <john@phrozen.org> */
 
+#include <kunit/visibility.h>
 #include <linux/atomic.h>
 #include <linux/limits.h>
 #include <linux/skbuff.h>
@@ -257,6 +258,7 @@ int pon_device_get_locked(const struct genl_split_ops *ops,
 
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_device_get_locked);
 
 /**
  * pon_device_unlock() - genl post_doit that drops the device lock
@@ -275,6 +277,7 @@ pon_device_unlock(const struct genl_split_ops *ops, struct sk_buff *skb,
 
 	mutex_unlock(&pdev->lock);
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_device_unlock);
 
 /* Device */
 
@@ -734,6 +737,7 @@ void pon_nl_obj_gen_inc(void)
 		new = old == INT_MAX ? 1 : old + 1;
 	} while (!atomic_try_cmpxchg(&pon_nl_obj_gen, &old, new));
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_nl_obj_gen_inc);
 
 /**
  * pon_nl_obj_dev_dump() - dump one object list of one device
@@ -865,6 +869,7 @@ bool pon_tcont_in_use(struct pon_dev *pdev, u16 index)
 			return true;
 	return false;
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_tcont_in_use);
 
 /**
  * pon_tcont_alloc_taken() - check whether another T-CONT holds an alloc-id
@@ -888,6 +893,7 @@ bool pon_tcont_alloc_taken(struct pon_dev *pdev, u16 index, u16 alloc_id)
 			return true;
 	return false;
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_tcont_alloc_taken);
 
 /**
  * pon_tcont_gems_rebind() - move the GEM ports of a T-CONT to another alloc-id
@@ -942,6 +948,7 @@ err_restore:
 
 	return err;
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_tcont_gems_rebind);
 
 /**
  * pon_nl_tcont_set_doit() - handle PON_CMD_TCONT_SET
@@ -1217,6 +1224,7 @@ bool pon_gems_full(struct pon_dev *pdev)
 		n++;
 	return n >= pdev->caps->max_gems;
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_gems_full);
 
 /**
  * pon_gem_cfg_same() - compare two GEM port configurations
@@ -2327,3 +2335,15 @@ int pon_nl_bcast_key_set_doit(struct sk_buff *skb, struct genl_info *info)
 	return err;
 }
 
+#if IS_ENABLED(CONFIG_KUNIT)
+/**
+ * pon_nl_family_get() - the pon generic netlink family
+ *
+ * Return: the family, for the KUnit tests.
+ */
+struct genl_family *pon_nl_family_get(void)
+{
+	return &pon_nl_family;
+}
+EXPORT_SYMBOL_IF_KUNIT(pon_nl_family_get);
+#endif

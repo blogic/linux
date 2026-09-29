@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2026 John Crispin <john@phrozen.org> */
 
+#include <kunit/visibility.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
@@ -78,6 +79,7 @@ struct pon_gem *pon_gem_find(struct pon_dev *pdev, u16 gem_id)
 			return gem;
 	return NULL;
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_gem_find);
 
 /**
  * pon_gem_channel() - the conduit transmit channel of a GEM port
@@ -117,8 +119,8 @@ int pon_gem_channel(struct pon_dev *pdev, const struct pon_gem *gem)
  * Return: true when @existing and @requested match on the same fields for the
  * same GEM port.
  */
-static bool pon_gem_map_same(const struct pon_gem_map_cfg *existing,
-			     const struct pon_gem_map_cfg *requested)
+VISIBLE_IF_KUNIT bool pon_gem_map_same(const struct pon_gem_map_cfg *existing,
+				       const struct pon_gem_map_cfg *requested)
 {
 	return existing->gem_id == requested->gem_id &&
 	       existing->tag_valid == requested->tag_valid &&
@@ -130,6 +132,7 @@ static bool pon_gem_map_same(const struct pon_gem_map_cfg *existing,
 	       existing->dscp_valid == requested->dscp_valid &&
 	       existing->dscp == requested->dscp;
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_gem_map_same);
 
 /**
  * pon_gem_map_find() - look up an upstream classifier rule
@@ -150,6 +153,7 @@ struct pon_gem_map *pon_gem_map_find(struct pon_dev *pdev,
 			return map;
 	return NULL;
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_gem_map_find);
 
 /**
  * pon_dev_tc_work() - offload the pending schedulers of the T-CONTs
@@ -182,6 +186,7 @@ void pon_tc_rebind_sched(struct pon_dev *pdev)
 {
 	queue_work(system_dfl_wq, &pdev->tc_work);
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_tc_rebind_sched);
 
 /**
  * pon_dev_create() - create and register a PON device

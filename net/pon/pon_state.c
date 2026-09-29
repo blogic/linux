@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2026 John Crispin <john@phrozen.org> */
 
+#include <kunit/visibility.h>
 #include <linux/bits.h>
 #include <linux/ethtool.h>
 #include <linux/jiffies.h>
@@ -167,6 +168,7 @@ void pon_dev_carrier_update(struct pon_dev *pdev)
 		if (gem->gem_netdev)
 			pon_netdev_carrier_set(gem->gem_netdev, up);
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_dev_carrier_update);
 
 /**
  * pon_dev_log_pop() - take the oldest recorded line out of the ring

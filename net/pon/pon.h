@@ -129,6 +129,15 @@ int pon_omci_notifier_register(void);
 void pon_omci_notifier_unregister(void);
 int pon_nl_omci_ntf(struct pon_dev *pdev, const struct sk_buff *skb);
 
+#if IS_ENABLED(CONFIG_KUNIT)
+int pon_omci_netlink_notify(struct notifier_block *nb, unsigned long state,
+			    void *data);
+extern struct rtnl_link_ops pon_gem_link_ops;
+struct genl_family *pon_nl_family_get(void);
+bool pon_gem_map_same(const struct pon_gem_map_cfg *existing,
+		      const struct pon_gem_map_cfg *requested);
+#endif
+
 bool pon_conduit_attach(struct pon_dev *pdev);
 void pon_conduit_detach(struct pon_dev *pdev);
 void pon_conduit_sync(struct pon_dev *pdev);

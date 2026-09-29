@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2026 John Crispin <john@phrozen.org> */
 
+#include <kunit/visibility.h>
 #include <linux/bitmap.h>
 #include <linux/netdevice.h>
 #include <net/pkt_cls.h>
@@ -374,6 +375,7 @@ void pon_tc_tcont_release(struct pon_dev *pdev, struct pon_tcont *tcont)
 	__set_bit(tcont->ets_channel, pdev->ets_stale);
 	pon_tc_rebind_sched(pdev);
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_tc_tcont_release);
 
 /**
  * pon_tc_unload() - take every scheduler the core offloaded off its channel

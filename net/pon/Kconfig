@@ -15,3 +15,19 @@ config PON
 	  called pon.
 
 	  If unsure, say N.
+
+config PON_KUNIT_TEST
+	tristate "KUnit tests for the PON subsystem" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	depends on PON
+	default KUNIT_ALL_TESTS
+	help
+	  Enable this option to test the PON subsystem with kunit: the
+	  message codec (a pure function of the ITU-T wire format), the
+	  lent context, the activation state, the FEC counters, the carrier,
+	  the OMCI channel, the conduit, the GEM network devices, the
+	  scheduler and flow offload and the netlink family. The tests run
+	  against a PON MAC and a conduit that they provide, without any PON
+	  hardware.
+
+	  If unsure, say N.

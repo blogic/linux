@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2026 John Crispin <john@phrozen.org> */
 
+#include <kunit/visibility.h>
 #include <linux/etherdevice.h>
 #include <linux/if_link.h>
 #include <linux/module.h>
@@ -185,6 +186,7 @@ int pon_gem_netdev_id(const struct net_device *dev, u16 *gem_id)
 
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_gem_netdev_id);
 
 /**
  * pon_gem_dev_destructor() - release what a GEM interface holds
@@ -507,7 +509,7 @@ static int pon_gem_fill_info(struct sk_buff *skb, const struct net_device *dev)
 	return 0;
 }
 
-static struct rtnl_link_ops pon_gem_link_ops = {
+VISIBLE_IF_KUNIT struct rtnl_link_ops pon_gem_link_ops = {
 	.kind		= PON_GEM_KIND,
 	.priv_size	= sizeof(struct pon_gem_priv),
 	.setup		= pon_gem_dev_setup,
@@ -518,6 +520,7 @@ static struct rtnl_link_ops pon_gem_link_ops = {
 	.get_size	= pon_gem_get_size,
 	.fill_info	= pon_gem_fill_info,
 };
+EXPORT_SYMBOL_IF_KUNIT(pon_gem_link_ops);
 MODULE_ALIAS_RTNL_LINK(PON_GEM_KIND);
 
 /**

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2026 John Crispin <john@phrozen.org> */
 
+#include <kunit/visibility.h>
 #include <linux/atomic.h>
 #include <linux/bottom_half.h>
 #include <linux/netlink.h>
@@ -222,6 +223,7 @@ int pon_omci_conduit_rx(struct pon_dev *pdev, struct sk_buff *skb,
 
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_omci_conduit_rx);
 
 /**
  * pon_omci_xmit() - send one OMCI PDU to the OLT
@@ -273,6 +275,7 @@ int pon_omci_xmit(struct pon_dev *pdev, const void *pdu, unsigned int len,
 
 	return err;
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_omci_xmit);
 
 /**
  * pon_omci_register() - claim the OMCI channel of a PON device for a socket
@@ -296,6 +299,7 @@ int pon_omci_register(struct pon_dev *pdev, u32 portid)
 
 	return owner && owner != portid ? -EBUSY : 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_omci_register);
 
 /**
  * pon_omci_netlink_notify() - release the OMCI channels of a closed socket
@@ -308,8 +312,8 @@ int pon_omci_register(struct pon_dev *pdev, u32 portid)
  *
  * Return: NOTIFY_DONE.
  */
-static int pon_omci_netlink_notify(struct notifier_block *nb,
-				   unsigned long state, void *data)
+VISIBLE_IF_KUNIT int pon_omci_netlink_notify(struct notifier_block *nb,
+					     unsigned long state, void *data)
 {
 	struct netlink_notify *notify = data;
 	struct pon_dev *pdev;
@@ -328,6 +332,7 @@ static int pon_omci_netlink_notify(struct notifier_block *nb,
 
 	return NOTIFY_DONE;
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_omci_netlink_notify);
 
 static struct notifier_block pon_omci_netlink_notifier = {
 	.notifier_call = pon_omci_netlink_notify,

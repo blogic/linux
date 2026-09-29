@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2026 John Crispin <john@phrozen.org> */
 
+#include <kunit/visibility.h>
 #include <linux/etherdevice.h>
 #include <linux/netdevice.h>
 #include <linux/notifier.h>
@@ -255,6 +256,7 @@ void pon_conduit_sync(struct pon_dev *pdev)
 	pon_conduit_carrier_update(pdev);
 	pon_tc_conduit_paired(pdev);
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_conduit_sync);
 
 /**
  * pon_conduit_register() - offer a network device's rings to a PON MAC
@@ -596,6 +598,7 @@ int pon_flow_block_setup(struct pon_dev *pdev,
 		return -EOPNOTSUPP;
 	}
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_flow_block_setup);
 
 /**
  * pon_conduit_flow_flush() - drop the offloaded flows of a GEM port
@@ -624,6 +627,7 @@ void pon_conduit_flow_flush(struct pon_dev *pdev, u16 gem)
 
 	netdev_put(conduit, &tracker);
 }
+EXPORT_SYMBOL_IF_KUNIT(pon_conduit_flow_flush);
 
 /**
  * pon_conduit_mtu_largest() - the MTU the conduit needs
