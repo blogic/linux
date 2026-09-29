@@ -107,6 +107,9 @@ int pon_dev_fec_refresh(struct pon_dev *pdev);
 void pon_fec_init(struct pon_dev *pdev);
 void pon_fec_start(struct pon_dev *pdev);
 
+void pon_pcs_init(struct pon_dev *pdev);
+void pon_pcs_link_forget(struct pon_dev *pdev);
+
 /* ITU-T G.988 clause 11.2.5 and Table 11.2-2: header and length are 10
  * bytes and a PDU is at most 1980 bytes including the 4 byte MIC.
  */
@@ -199,6 +202,20 @@ static inline bool pon_dev_is_registered(struct pon_dev *pdev)
 {
 	lockdep_assert_held(&pdev->lock);
 	return pdev->ops && !pdev->going_away;
+}
+
+/**
+ * pon_dev_has_fec() - test that a PON device reports FEC counters
+ * @pdev:	PON device structure, registered
+ *
+ * Context: Called with @pdev->lock held.
+ * Return: true when a PON PCS is attached or the driver has a fec_stats
+ * callback, false otherwise.
+ */
+static inline bool pon_dev_has_fec(struct pon_dev *pdev)
+{
+	lockdep_assert_held(&pdev->lock);
+	return pdev->pcs || pdev->ops->fec_stats;
 }
 
 #endif /* __PON_PON_H */

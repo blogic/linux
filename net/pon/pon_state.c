@@ -458,9 +458,12 @@ EXPORT_SYMBOL_GPL(pon_dev_event);
  * nothing, so the totals start at zero rather than at whatever the hardware
  * happens to hold.
  *
+ * The counters come from the attached PON PCS when there is one and from the
+ * driver's fec_stats callback otherwise.
+ *
  * Context: Called with @pdev->lock held.
- * Return: 0, -EOPNOTSUPP when the driver is gone or reports no FEC counters,
- * or the driver's errno.
+ * Return: 0, -EOPNOTSUPP when the driver is gone or neither the driver nor
+ * an attached PON PCS reports FEC counters, or the errno of the read.
  */
 int pon_dev_fec_refresh(struct pon_dev *pdev)
 {
@@ -471,10 +474,13 @@ int pon_dev_fec_refresh(struct pon_dev *pdev)
 
 	lockdep_assert_held(&pdev->lock);
 
-	if (!pdev->ops || !pdev->ops->fec_stats)
+	if (!pdev->ops || !pon_dev_has_fec(pdev))
 		return -EOPNOTSUPP;
 
-	err = pdev->ops->fec_stats(pdev, &now);
+	if (pdev->pcs)
+		err = pdev->pcs->ops->pcs_get_fec_stats(pdev->pcs, &now);
+	else
+		err = pdev->ops->fec_stats(pdev, &now);
 	if (err)
 		return err;
 
@@ -533,14 +539,14 @@ void pon_fec_init(struct pon_dev *pdev)
  * pon_fec_start() - arm the next fold of the FEC counters
  * @pdev:	PON device structure
  *
- * Queues pon_fec_fold_work() after PON_FEC_FOLD_INTERVAL when the driver
- * reports FEC counters and does nothing otherwise.
+ * Queues pon_fec_fold_work() after PON_FEC_FOLD_INTERVAL when the driver or
+ * an attached PON PCS reports FEC counters and does nothing otherwise.
  *
  * Context: Called with @pdev->lock held.
  */
 void pon_fec_start(struct pon_dev *pdev)
 {
-	if (pdev->ops->fec_stats)
+	if (pon_dev_has_fec(pdev))
 		pon_delayed_work_queue(pdev, &pdev->fec_work,
 				       PON_FEC_FOLD_INTERVAL);
 }

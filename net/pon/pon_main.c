@@ -250,6 +250,7 @@ struct pon_dev *pon_dev_create(struct net_device *netdev,
 	pon_alarm_init(pdev);
 	pon_log_init(pdev);
 	pon_fec_init(pdev);
+	pon_pcs_init(pdev);
 	refcount_set(&pdev->refcnt, 1);
 
 	/* Ordered, so that the work items run one at a time and in the order
@@ -371,6 +372,7 @@ void pon_dev_unregister(struct pon_dev *pdev)
 	mutex_unlock(&pon_devs_lock);
 
 	if (pdev->enabled) {
+		pon_pcs_link_forget(pdev);
 		pdev->ops->enable(pdev, false, NULL);
 		pdev->enabled = false;
 	}

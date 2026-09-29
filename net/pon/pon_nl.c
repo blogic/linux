@@ -470,7 +470,9 @@ static bool pon_nl_serial_same(const struct pon_dev *pdev,
  * address every ONU. The disabled setting restores the emergency stop state
  * O7 of G.9807.1 Table C.12.1 (which persists over a reboot) and is accepted
  * only while the link is disabled. A PON_CMD_DEV_CHANGE_NTF follows
- * once the identity changed, even when the enable op then fails.
+ * once the identity changed, even when the enable op then fails. The link
+ * the attached PON PCS last reported is forgotten before the enable op, so
+ * that the driver hears of it again once the restarted link has sync.
  *
  * Context: Called with the device lock held by pon_device_get_locked().
  * Return: 0, or a negative errno.
@@ -561,6 +563,7 @@ static int pon_nl_dev_set(struct genl_info *info, struct pon_identity *id)
 	if (info->attrs[PON_A_DEV_ENABLE]) {
 		bool on = nla_get_u8(info->attrs[PON_A_DEV_ENABLE]);
 
+		pon_pcs_link_forget(pdev);
 		err = pdev->ops->enable(pdev, on, info->extack);
 		if (err) {
 			if (identity)
@@ -1749,14 +1752,14 @@ err_cancel_msg:
  * @info: the request info, user_ptr[0] holds the device
  *
  * Context: Called with the device lock held by pon_device_get_locked().
- * Return: 0, -EOPNOTSUPP when the driver has no fec_stats callback, or a
- * negative errno.
+ * Return: 0, -EOPNOTSUPP when neither the driver nor an attached PON PCS
+ * reports FEC counters, or a negative errno.
  */
 int pon_nl_fec_get_doit(struct sk_buff *skb, struct genl_info *info)
 {
 	struct pon_dev *pdev = info->user_ptr[0];
 
-	if (!pdev->ops->fec_stats) {
+	if (!pon_dev_has_fec(pdev)) {
 		NL_SET_ERR_MSG(info->extack,
 			       "the driver reports no FEC counters");
 		return -EOPNOTSUPP;

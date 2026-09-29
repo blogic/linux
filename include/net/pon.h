@@ -8,6 +8,8 @@
 #include <net/pon/ploam.h>
 #include <net/pon/types.h>
 #include <net/pon/functions.h>
+#include <net/pon/phy.h>
+#include <net/pon/pcs.h>
 
 /* Do not add any code here. Put it in the sub-headers instead. */
 

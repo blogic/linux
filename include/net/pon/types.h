@@ -20,6 +20,7 @@ struct net_device;
 struct netlink_ext_ack;
 struct pon_conduit;
 struct pon_dev;
+struct pon_pcs;
 struct pon_work;
 struct sk_buff;
 
@@ -418,10 +419,11 @@ struct pon_conduit_ops {
  * @caps: device capabilities
  * @drv_priv: driver priv pointer
  * @lock: instance lock and the driver's upcalls. It protects every field
- *	  below it, with these exceptions. @alarms changes with atomic bit
- *	  operations from hard interrupt. @conduit is @pon_devs_lock's. The
- *	  OMCI fields name their own rules. @ploam and @going_away are
- *	  written under the lock and read without it through READ_ONCE()
+ *	  below it, with these exceptions. @alarms and @pcs_failed change
+ *	  with atomic operations from hard interrupt. @conduit is
+ *	  @pon_devs_lock's. The OMCI fields name their own rules. @ploam and
+ *	  @going_away are written under the lock and read without it through
+ *	  READ_ONCE()
  * @refcnt: reference count for the instance
  * @id: instance id
  * @mode: active mode, enum pon_mode
@@ -449,12 +451,19 @@ struct pon_conduit_ops {
  * @fec: the FEC counters accumulated across the driver's 32 bit wraps
  * @fec_work: folds the driver's FEC counters into @fec every ten seconds
  *	      while the device is registered, when the driver has a fec_stats
- *	      callback
+ *	      callback or a PON PCS is attached
  * @lods_events: losses of downstream synchronization, the edges O5 to O6
  * @lods_restored: losses that ended with the synchronization back, the edges
  *		   O6 to O5
  * @lods_reactivations: losses that ended in a new activation, the edges O6
  *			to O1
+ * @pcs: the PON PCS that pon_dev_pcs_attach() attached, NULL while none is
+ * @pcs_work: reads the state of @pcs after a report of pon_pcs_change() and
+ *	      passes a change of the link to the driver's pcs_link callback.
+ *	      Does nothing while the link is not enabled
+ * @pcs_failed: pon_pcs_change() reported a loss that @pcs_work has not taken
+ *		yet, set from any context
+ * @pcs_up: the link as the core last passed it to the pcs_link callback
  * @identity: the serial number as dev-set last delivered it, which dev-get
  *	      reports. The registration id goes to the driver and is not kept
  * @identity.serial: serial number, valid when @identity.serial_set
@@ -541,6 +550,10 @@ struct pon_dev {
 	u64 lods_events;
 	u64 lods_restored;
 	u64 lods_reactivations;
+	struct pon_pcs *pcs;
+	struct pon_work pcs_work;
+	atomic_t pcs_failed;
+	bool pcs_up;
 	struct work_struct tc_work;
 	DECLARE_BITMAP(ets_stale, PON_TX_CHANNELS);
 	bool going_away;
@@ -642,9 +655,25 @@ struct pon_dev_ops {
 	 * @fec_stats: read the whole-device FEC counters
 	 * The counters are continuous: a driver whose hardware clears them at
 	 * a link event or a reset adds what they held before, so a counter
-	 * goes back only when it wraps. Instance lock held.
+	 * goes back only when it wraps. Not called while a PON PCS is
+	 * attached: the core reads the PCS then. Instance lock held.
 	 */
 	int (*fec_stats)(struct pon_dev *pdev, struct pon_fec_stats *stats);
+
+	/**
+	 * @pcs_link: the link of the attached PON PCS went up or down,
+	 *	      mandatory for a driver that attaches one, as is @enable.
+	 *	      The core calls it only while the link is enabled and only
+	 *	      when the link differs from what it last passed on.
+	 *	      A loss the PCS reported is passed on as down even when the
+	 *	      level is back by the time the core reads it. Up follows
+	 *	      then. The core forgets the link before each call of the
+	 *	      enable callback, so up comes again once a restarted link
+	 *	      has sync. The driver reads the level itself with
+	 *	      pon_dev_pcs_sync(). Runs in the instance's context with
+	 *	      the lock held and may sleep.
+	 */
+	void (*pcs_link)(struct pon_dev *pdev, bool up);
 
 	/**
 	 * @tc_stats: read the counters of the transmission convergence layer,

@@ -4,3 +4,4 @@ obj-$(CONFIG_PON) += pon.o
 
 pon-y := pon_main.o pon_nl.o pon_omci.o pon_gem.o pon_conduit.o pon_tc.o \
 	 pon_work.o pon_state.o pon_alarm.o pon_ploam_msg.o pon-nl-gen.o
+pon-y += pon_pcs.o
