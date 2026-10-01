@@ -97,6 +97,7 @@ Contents:
    pktgen
    plip
    pon
+   pon-technology
    ppp_generic
    proc_net_tcp
    pse-pd/index
