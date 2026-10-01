@@ -390,9 +390,10 @@ EXPORT_SYMBOL_GPL(pon_dev_state_report);
  *
  * A tcont-alloc event means the driver bound the alloc-id to a channel, so
  * the GEM ports that ride it carry traffic from then on: the carrier may
- * rise. A tcont-dealloc event means the driver released the channel: the
- * carrier may fall. An event that arrives once pon_dev_unregister() has
- * begun is dropped.
+ * rise and a scheduler that waited for the channel is offloaded. A
+ * tcont-dealloc event means the driver released the channel: the carrier
+ * may fall and the scheduler waits for the next tcont-alloc. An event that
+ * arrives once pon_dev_unregister() has begun is dropped.
  */
 void pon_dev_event(struct pon_dev *pdev, const struct pon_event *ev)
 {
@@ -401,9 +402,13 @@ void pon_dev_event(struct pon_dev *pdev, const struct pon_event *ev)
 	if (pdev->going_away)
 		return;
 
-	if (ev->type == PON_EVENT_TYPE_TCONT_ALLOC ||
-	    ev->type == PON_EVENT_TYPE_TCONT_DEALLOC)
+	if (ev->type == PON_EVENT_TYPE_TCONT_ALLOC) {
 		pon_dev_carrier_update(pdev);
+		pon_tc_alloc_bound(pdev, ev->alloc_id);
+	} else if (ev->type == PON_EVENT_TYPE_TCONT_DEALLOC) {
+		pon_dev_carrier_update(pdev);
+		pon_tc_alloc_unbound(pdev, ev->alloc_id);
+	}
 
 	pon_nl_notify_event(pdev, ev);
 }

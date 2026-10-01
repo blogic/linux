@@ -25,6 +25,7 @@ struct sk_buff;
 
 #define PON_LOG_LINES		16
 #define PON_LOG_LINE_LEN	64
+#define PON_TX_CHANNELS		(U8_MAX + 1)
 
 typedef void (*pon_work_func_t)(struct pon_dev *pdev, struct pon_work *work);
 
@@ -83,7 +84,9 @@ struct pon_identity {
 
 /**
  * struct pon_tcont_cfg - one T-CONT binding
- * @index: T-CONT index in the device, 0 based
+ * @index: T-CONT index in the device, 0 based. It is also the transmit
+ *	   queue of the data interface that carries the T-CONT's frames, so
+ *	   the scheduler of a T-CONT is the qdisc on that queue
  * @alloc_id: alloc-id assigned by the OLT
  */
 struct pon_tcont_cfg {
@@ -216,10 +219,17 @@ struct pon_rx_info {
  *	  under rcu_read_lock() with bottom halves disabled, from every PON
  *	  network device and the OMCI channel at once and without the
  *	  conduit's own transmit lock, so the driver locks its ring itself.
+ * @setup_tc: offload a qdisc of the PON data interface onto the transmit
+ *	      channel a T-CONT is bound to, optional. @type and @type_data
+ *	      are what ndo_setup_tc was given. The channel is the one the
+ *	      MAC driver named through its tcont_channel callback. Called with
+ *	      rtnl and the instance lock held.
  */
 struct pon_conduit_ops {
 	netdev_tx_t (*xmit)(struct net_device *conduit, struct sk_buff *skb,
 			    const struct pon_tx_info *info);
+	int (*setup_tc)(struct net_device *conduit, unsigned int channel,
+			enum tc_setup_type type, void *type_data);
 };
 
 /**
@@ -273,6 +283,12 @@ struct pon_conduit_ops {
  * @log_count: the lines held in @log_lines
  * @log_dropped: the oldest lines a full @log_lines dropped since @log_work
  *		 last printed the count
+ * @tc_work: offloads the scheduler of a T-CONT again once it moved to
+ *	     another alloc-id or got a channel it lacked. Takes the
+ *	     schedulers of @ets_stale off. Runs under rtnl, which the
+ *	     conduit's ndo_setup_tc path needs
+ * @ets_stale: conduit transmit channels that still hold the scheduler of a
+ *	       deleted T-CONT, until @tc_work takes it off
  * @going_away: set on the unregister path, so a work item already past its
  *		scheduling point does not reach a driver that is leaving
  * @rcu: RCU head for freeing the structure
@@ -320,6 +336,8 @@ struct pon_dev {
 	unsigned int log_head;
 	unsigned int log_count;
 	unsigned int log_dropped;
+	struct work_struct tc_work;
+	DECLARE_BITMAP(ets_stale, PON_TX_CHANNELS);
 	bool going_away;
 
 	struct rcu_head rcu;
@@ -373,9 +391,10 @@ struct pon_dev_ops {
 
 	/**
 	 * @tcont_channel: the conduit transmit channel a T-CONT is bound to,
-	 *		   optional. The core asks it for the carrier, which is
-	 *		   up while a GEM port rides a T-CONT with a channel.
-	 *		   Without it the carrier rises with the first GEM
+	 *		   optional. The core asks it for the carrier too, which
+	 *		   is up while a GEM port rides a T-CONT with a channel.
+	 *		   Without it no qdisc of the data interface is
+	 *		   offloaded and the carrier rises with the first GEM
 	 *		   port. Return the channel, -ENOLINK while the OLT has
 	 *		   not assigned the alloc-id and the T-CONT has no
 	 *		   channel yet, or another negative errno. The default

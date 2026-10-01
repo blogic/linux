@@ -144,6 +144,11 @@ handler runs with the instance lock held, so it may sleep. One worker drains
 the list one item at a time, so the ordering a driver sees is the order it
 queued in.
 
+The offload of a T-CONT's scheduler does not run in that context. It waits for
+rtnl, which another task can hold for a long time. The activation state
+machine must not wait with it. It takes the instance lock, so it cannot
+overtake the event that asked for it.
+
 A driver arms its activation timers as ``pon_delayed_work``, so their handlers
 run in the same context. ``pon_work_cancel()`` and
 ``pon_delayed_work_cancel()`` must be called with the instance lock held,
@@ -229,6 +234,59 @@ the frames of all of them ride its rings. The core sets it when the two are
 paired and when a GEM port's network device is created or changes its MTU. The
 MAC driver calls ``pon_conduit_mtu_set()`` from the ``ndo_change_mtu`` of the
 data interface. A change that the conduit's driver refuses is refused.
+
+Upstream scheduling
+===================
+
+G.988 describes the upstream scheduler of an ONU with its own managed
+entities: a T-CONT holds priority queues, each with a weight and a priority,
+under a traffic scheduler that is strict or weighted round robin. The kernel
+already has that model, so the subsystem carries no queue object of its own.
+
+The PON data interface, named ``pon0`` in these examples, has one transmit
+queue per T-CONT index and the frame's GEM port names the T-CONT that queue
+N carries. The qdisc attached to queue N,
+which is the ``mq`` child ``N+1``, is the scheduler of that T-CONT and an
+``ets`` qdisc there is offloaded onto the transmit channel the MAC driver bound
+the T-CONT to. Its bands are the hardware queues within the channel, selected by
+``skb->priority``, as on the ethernet ports of the same silicon::
+
+    tc qdisc replace dev pon0 root handle 1: mq
+    tc qdisc replace dev pon0 parent 1:2 handle 12: ets bands 8 strict 2 \
+        quanta 1000 1000 1000 1000 1000 1000 priomap 2 3 4 5 6 7 1 0
+
+configures T-CONT index 1 with two strict bands for the two highest priorities
+and six weighted ones below them. A T-CONT the OLT has not assigned an alloc-id
+to yet keeps the configuration and receives it once the alloc-id is bound. An
+instance without a conduit keeps it the same way and the conduit receives it
+when it pairs. The core offloads it again whenever ``tcont-set`` binds the
+T-CONT to another alloc-id, because the T-CONT may be on another channel then.
+The core does all of this from a work item that holds rtnl as the qdisc layer
+does. A channel keeps a scheduler until it is told otherwise, so the core
+takes the scheduler off the channel it offloaded it to when the T-CONT leaves
+that channel: when the T-CONT moves to another alloc-id, when the qdisc is
+deleted, when the T-CONT is deleted and when the MAC driver unregisters. It
+leaves the channel alone when the scheduler of another T-CONT sits there by
+then.
+
+``tc qdisc show`` marks the ``ets`` qdisc ``offloaded`` while the channel runs
+it: not while it waits for an alloc-id or a conduit and not after the conduit
+refused the last change. The qdisc layer offloads only to a device that
+advertises ``NETIF_F_HW_TC``, so the MAC driver sets it on the data interface.
+A new activation needs none of it: the driver binds an alloc-id the OLT assigns
+again to the channel it had, where the scheduler still is.
+
+To take the scheduler off a T-CONT, replace it rather than delete it::
+
+    tc qdisc replace dev pon0 parent 1:2 fq_codel
+
+as on any multiqueue device: deleting the child of ``mq`` leaves the queue with
+no qdisc at all and every frame of that T-CONT is dropped until one is put
+back.
+
+The OMCI daemon that reads the priority queue and traffic scheduler entities is
+expected to express them through this interface rather than through the netlink
+family.
 
 Netlink interface
 =================

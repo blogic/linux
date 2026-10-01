@@ -76,6 +76,8 @@ int pon_conduit_xmit(struct pon_dev *pdev, struct sk_buff *skb,
 int pon_conduit_addr_set(struct pon_dev *pdev, const u8 *addr);
 int pon_conduit_mtu_set(struct pon_dev *pdev, const struct net_device *dev,
 			unsigned int mtu);
+int pon_dev_setup_tc(struct pon_dev *pdev, enum tc_setup_type type,
+		     void *type_data);
 /**
  * netdev_uses_pon() - whether a network device belongs to a PON MAC
  * @dev: the network device

@@ -4,6 +4,7 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
+#include <linux/rtnetlink.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
@@ -151,6 +152,38 @@ struct pon_gem_map *pon_gem_map_find(struct pon_dev *pdev,
 }
 
 /**
+ * pon_dev_tc_work() - offload the pending schedulers of the T-CONTs
+ * @work:	the instance's @tc_work
+ *
+ * Queued by pon_tc_rebind_sched(). pon_dev_unregister() disables the item
+ * before it frees the T-CONTs, so it never runs after that.
+ *
+ * Context: Process context. Takes rtnl and then @pdev->lock.
+ */
+static void pon_dev_tc_work(struct work_struct *work)
+{
+	struct pon_dev *pdev = container_of(work, struct pon_dev, tc_work);
+
+	rtnl_lock();
+	mutex_lock(&pdev->lock);
+	pon_tc_rebind(pdev);
+	mutex_unlock(&pdev->lock);
+	rtnl_unlock();
+}
+
+/**
+ * pon_tc_rebind_sched() - offload the pending schedulers of the T-CONTs
+ * @pdev:	PON device structure
+ *
+ * Safe from any context. Does nothing once pon_dev_unregister() has disabled
+ * the work item.
+ */
+void pon_tc_rebind_sched(struct pon_dev *pdev)
+{
+	queue_work(system_dfl_wq, &pdev->tc_work);
+}
+
+/**
  * pon_dev_create() - create and register a PON device
  * @netdev:	the PON data network device, already registered, with
  *		per-CPU transmit and receive statistics
@@ -212,6 +245,7 @@ struct pon_dev *pon_dev_create(struct net_device *netdev,
 	xa_init(&pdev->gem_netdevs);
 	INIT_LIST_HEAD(&pdev->work_list);
 	INIT_WORK(&pdev->work, pon_work_worker);
+	INIT_WORK(&pdev->tc_work, pon_dev_tc_work);
 	pon_log_init(pdev);
 	refcount_set(&pdev->refcnt, 1);
 
@@ -301,10 +335,11 @@ EXPORT_SYMBOL_GPL(pon_dev_put);
  * @pdev:	PON device structure
  *
  * Stops the upstream link through the driver's enable callback when it is
- * enabled, then withdraws the device. Once this returns no netlink request,
- * no work item and no network device of the core reaches the driver. The
- * lines that pon_dev_log() recorded until then are printed before it
- * returns.
+ * enabled, then withdraws the device. It takes the schedulers of the T-CONTs
+ * off the conduit's channels while the conduit is still paired. Once this
+ * returns no netlink request, no work item and no network device of the core
+ * reaches the driver. The lines that pon_dev_log() recorded until then are
+ * printed before it returns.
  *
  * The device itself stays until the driver calls pon_dev_put(). What a
  * driver still reports to it in between, from an interrupt or from the data
@@ -340,6 +375,12 @@ void pon_dev_unregister(struct pon_dev *pdev)
 	WRITE_ONCE(pdev->going_away, true);
 	mutex_unlock(&pdev->lock);
 
+	rtnl_lock();
+	mutex_lock(&pdev->lock);
+	pon_tc_unload(pdev);
+	mutex_unlock(&pdev->lock);
+	rtnl_unlock();
+
 	/* First, so that no frame reaches the instance once its objects go. */
 	pon_conduit_detach(pdev);
 
@@ -350,6 +391,7 @@ void pon_dev_unregister(struct pon_dev *pdev)
 
 	/* Each takes the instance lock, so none is waited for with it held. */
 	disable_work_sync(&pdev->work);
+	disable_work_sync(&pdev->tc_work);
 	flush_work(&pdev->log_work);
 	disable_work_sync(&pdev->log_work);
 

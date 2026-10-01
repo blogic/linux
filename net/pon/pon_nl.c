@@ -940,6 +940,10 @@ int pon_nl_tcont_set_doit(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	pon_dev_carrier_update(pdev);
+	if (changed && tcont->ets_set) {
+		tcont->ets_pending = true;
+		pon_tc_rebind_sched(pdev);
+	}
 
 	if (is_new)
 		pon_nl_notify_tcont(pdev, tcont, PON_CMD_TCONT_ADD_NTF);
@@ -1101,6 +1105,7 @@ int pon_nl_tcont_del_doit(struct sk_buff *skb, struct genl_info *info)
 
 	pon_nl_notify_tcont(pdev, tcont, PON_CMD_TCONT_DEL_NTF);
 
+	pon_tc_tcont_release(pdev, tcont);
 	list_del(&tcont->list);
 	kfree(tcont);
 	pon_nl_obj_gen_inc();

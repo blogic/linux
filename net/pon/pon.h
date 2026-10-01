@@ -9,6 +9,7 @@
 #include <linux/mutex.h>
 #include <linux/workqueue.h>
 #include <linux/xarray.h>
+#include <net/pkt_cls.h>
 #include <net/pon.h>
 
 #define PON_GEM_KIND		"gem"
@@ -20,10 +21,30 @@ extern struct mutex pon_devs_lock;
  * struct pon_tcont - one T-CONT of an instance
  * @list:	entry in the instance's @tconts list
  * @cfg:	the configuration tcont-set last stored
+ * @ets:	the ETS scheduler tc last configured on the T-CONT's queue
+ * @ets_set:	@ets holds a scheduler to offload
+ * @ets_pending: @ets is not offloaded to the current channel yet, because
+ *		 the T-CONT has no channel or moved to another one
+ * @ets_refused: the conduit refused the last configuration tc replaced @ets
+ *		 with, so tc holds a scheduler that the hardware does not run
+ * @ets_offloaded: the core offloaded @ets onto @ets_channel and has not taken
+ *		   it off again
+ * @ets_channel: the conduit transmit channel @ets was last offloaded to,
+ *		 valid when @ets_offloaded
+ *
+ * The scheduler tc last configured on the T-CONT's queue is kept, because
+ * the T-CONT can move to another alloc-id and so to another conduit channel.
+ * The qdisc layer does not offload again on its own.
  */
 struct pon_tcont {
 	struct list_head list;
 	struct pon_tcont_cfg cfg;
+	struct tc_ets_qopt_offload_replace_params ets;
+	bool ets_set;
+	bool ets_pending;
+	bool ets_refused;
+	bool ets_offloaded;
+	u8 ets_channel;
 };
 
 /**
@@ -55,6 +76,7 @@ struct pon_gem *pon_gem_find(struct pon_dev *pdev, u16 gem_id);
 int pon_gem_channel(struct pon_dev *pdev, const struct pon_gem *gem);
 struct pon_gem_map *pon_gem_map_find(struct pon_dev *pdev,
 				     const struct pon_gem_map_cfg *cfg);
+void pon_tc_rebind_sched(struct pon_dev *pdev);
 bool pon_tcont_in_use(struct pon_dev *pdev, u16 index);
 bool pon_gems_full(struct pon_dev *pdev);
 bool pon_tcont_alloc_taken(struct pon_dev *pdev, u16 index, u16 alloc_id);
@@ -107,6 +129,16 @@ void pon_conduit_notifier_unregister(void);
 struct net_device *pon_conduit_hold(struct pon_dev *pdev,
 				    const struct pon_conduit_ops **ops,
 				    netdevice_tracker *tracker);
+int pon_conduit_setup_tc(struct pon_dev *pdev, unsigned int channel,
+			 enum tc_setup_type type, void *type_data,
+			 bool *paired);
+
+void pon_tc_rebind(struct pon_dev *pdev);
+void pon_tc_alloc_bound(struct pon_dev *pdev, u32 alloc_id);
+void pon_tc_alloc_unbound(struct pon_dev *pdev, u32 alloc_id);
+void pon_tc_conduit_paired(struct pon_dev *pdev);
+void pon_tc_tcont_release(struct pon_dev *pdev, struct pon_tcont *tcont);
+void pon_tc_unload(struct pon_dev *pdev);
 
 int pon_gem_link_register(void);
 void pon_gem_link_unregister(void);

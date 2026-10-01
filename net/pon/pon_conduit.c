@@ -212,13 +212,15 @@ int pon_conduit_addr_set(struct pon_dev *pdev, const u8 *addr)
 EXPORT_SYMBOL_GPL(pon_conduit_addr_set);
 
 /**
- * pon_conduit_sync() - give a newly paired conduit the address and the MTU
+ * pon_conduit_sync() - give a newly paired conduit the address, the MTU and
+ *			the schedulers
  * @pdev:	PON device structure
  *
  * After a pairing, outside every lock: the conduit's driver programs its
  * address and its MTU under rtnl, which is never taken while an instance lock
- * is held. The carrier follows the new conduit. A conduit that refuses the
- * address or the MTU is warned about and stays paired.
+ * is held. The carrier follows the new conduit and the kept schedulers of the
+ * T-CONTs follow from a work item. A conduit that refuses the address or the
+ * MTU is warned about and stays paired.
  *
  * Does nothing once pon_dev_unregister() has begun. It tests that under rtnl,
  * which pon_dev_unregister() takes before it lets the driver free the data
@@ -248,6 +250,7 @@ void pon_conduit_sync(struct pon_dev *pdev)
 	rtnl_unlock();
 
 	pon_conduit_carrier_update(pdev);
+	pon_tc_conduit_paired(pdev);
 }
 
 /**
@@ -449,6 +452,42 @@ void pon_conduit_detach(struct pon_dev *pdev)
 	if (entry)
 		pon_conduit_unpair(entry);
 	mutex_unlock(&pon_devs_lock);
+}
+
+/**
+ * pon_conduit_setup_tc() - offload a qdisc onto a transmit channel
+ * @pdev:	PON device structure
+ * @channel:	the conduit transmit channel a T-CONT is bound to
+ * @type:	what tc is setting up
+ * @type_data:	the qdisc's offload parameters
+ * @paired:	set to whether a conduit is paired, so that a caller tells a
+ *		missing conduit apart from any errno of the conduit's driver
+ *
+ * Hands the qdisc to the setup_tc callback of the conduit's driver.
+ *
+ * Context: Called with rtnl and @pdev->lock held.
+ * Return: 0, also without a conduit, -EOPNOTSUPP when the conduit's driver
+ * offloads no qdisc, or what the conduit's driver answered.
+ */
+int pon_conduit_setup_tc(struct pon_dev *pdev, unsigned int channel,
+			 enum tc_setup_type type, void *type_data,
+			 bool *paired)
+{
+	const struct pon_conduit_ops *ops;
+	struct net_device *conduit;
+	netdevice_tracker tracker;
+	int err;
+
+	conduit = pon_conduit_hold(pdev, &ops, &tracker);
+	*paired = !!conduit;
+	if (!conduit)
+		return 0;
+
+	err = ops->setup_tc ? ops->setup_tc(conduit, channel, type, type_data) :
+			      -EOPNOTSUPP;
+	netdev_put(conduit, &tracker);
+
+	return err;
 }
 
 /**
