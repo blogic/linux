@@ -214,6 +214,16 @@ attribute-sets:
           ITU-T G.988 reports it through the ANI-G managed entity. Absent
           when the device cannot report it.
         type: u32
+      -
+        name: disabled
+        doc: |
+          Present when the OLT disabled this ONU, the emergency stop state O7
+          of ITU-T G.9807.1 (Table C.12.1), which persists over a reboot and a
+          power cycle of the ONU. The kernel does not store it. Userspace
+          stores it when the activation state enters or leaves O7 and sets it
+          again before it starts the link. Only the OLT takes the ONU out of
+          the state, so dev-set has no way to clear it.
+        type: flag
   -
     name: tcont
     attributes:
@@ -669,6 +679,7 @@ operations:
             - max-gems
             - response-time
             - enable
+            - disabled
         pre: pon-device-get-locked
         post: pon-device-unlock
       dump:
@@ -676,9 +687,10 @@ operations:
     -
       name: dev-set
       doc: |
-        Set the identity of a PON device, start or stop its upstream link, or
-        any combination. While the link is enabled, a mode or a serial number
-        other than the one the device holds is refused with EBUSY.
+        Set the identity or the disabled state of a PON device, start or stop
+        its upstream link, or any combination. While the link is enabled, a
+        mode or a serial number other than the one the device holds is
+        refused with EBUSY.
         The settings are applied before the link moves.
       attribute-set: dev
       flags: [admin-perm]
@@ -690,6 +702,7 @@ operations:
             - serial
             - registration-id
             - enable
+            - disabled
         pre: pon-device-get-locked
         post: pon-device-unlock
     -

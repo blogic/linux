@@ -377,6 +377,18 @@ alloc-id releases it first.
 number. The driver carries no serial of its own, so an ONU that has not been
 provisioned stays silent rather than range under a vendor default.
 
+``dev-get`` carries the ``disabled`` flag only while the ONU is in the
+emergency stop state O7, where the OLT puts it with a Disable_Serial_Number
+message and from where only the OLT takes it out again. G.9807.1 keeps that
+state over a reboot and a power cycle of the ONU and the kernel has nowhere to
+keep it. Userspace therefore stores it when the activation state enters or
+leaves O7 and hands it back in ``dev-set``, which takes ``disabled`` only while
+the link is not enabled and answers ``-EBUSY`` otherwise. The flag has no value
+to clear it with: the host restores the state and never releases the ONU from
+it (G.9807.1 Table C.12.1). In one request with ``enable`` the state is applied
+first: the link starts in O7 with the transmitter off and the ONU listens for
+the OLT to enable it.
+
 No key material crosses this interface in either direction. ``gem-new`` selects
 the key ring of each GEM port, as G.988 clause 9.2.3 defines it. The key
 ring alone decides whether a GEM port is encrypted and in which direction. The

@@ -72,6 +72,13 @@ struct pon_delayed_work {
  *	    0x00 bytes to PON_REG_ID_LEN (ITU-T G.9807.1 Table C.11.25)
  * @serial_set: @serial carries a value
  * @mode_set: @mode carries a value
+ * @disabled: restore the emergency stop state O7, which userspace keeps
+ *	      over a reboot (ITU-T G.9807.1 Table C.12.1). The driver enters
+ *	      the state and reports it through pon_dev_state_report(). Only the
+ *	      OLT takes the ONU out of it, so the core never asks the driver to
+ *	      leave it. The core passes it only while the link is not enabled
+ *	      and keeps no copy of it: dev-get answers from the activation state
+ *	      the driver reported
  * @reg_id_len: PON_REG_ID_LEN when @reg_id carries a value, 0 when absent
  */
 struct pon_identity {
@@ -80,6 +87,7 @@ struct pon_identity {
 	u8 reg_id[PON_REG_ID_LEN];
 	bool serial_set;
 	bool mode_set;
+	bool disabled;
 	u8 reg_id_len;
 };
 
@@ -561,7 +569,7 @@ struct pon_dev_ops {
 
 	/**
 	 * @set_identity: set the ONU identity and the settings that travel
-	 *		  with it
+	 *		  with it, the disabled state among them
 	 * Only the members whose _set flag or length is nonzero changed.
 	 * Instance lock held.
 	 */

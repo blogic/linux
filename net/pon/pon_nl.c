@@ -285,7 +285,8 @@ pon_device_unlock(const struct genl_split_ops *ops, struct sk_buff *skb,
  * @info: the request, or the notification info
  *
  * The response time is the ONU response time of ITU-T G.988 clause 9.2.1,
- * present only when the driver reports it.
+ * present only when the driver reports it. The disabled flag is present only
+ * in the emergency stop state O7 of ITU-T G.9807.1 Table C.12.1.
  *
  * Context: Called with @pdev->lock held.
  * Return: 0, or -EMSGSIZE when the message does not fit.
@@ -323,6 +324,10 @@ pon_nl_dev_fill(struct pon_dev *pdev, struct sk_buff *rsp,
 	}
 
 	if (nla_put_u8(rsp, PON_A_DEV_ENABLE, pdev->enabled))
+		goto err_cancel_msg;
+
+	if (READ_ONCE(pdev->ploam) == PON_PLOAM_STATE_O7 &&
+	    nla_put_flag(rsp, PON_A_DEV_DISABLED))
 		goto err_cancel_msg;
 
 	genlmsg_end(rsp, hdr);
@@ -462,8 +467,10 @@ static bool pon_nl_serial_same(const struct pon_dev *pdev,
  * other than the one the device holds is refused: the OLT addresses the ONU
  * by its serial number (G.9807.1 clause C.11.2.6.1). The serial number of
  * eight 0x00 bytes is refused, since G.9807.1 Table C.11.23A uses it to
- * address every ONU. A PON_CMD_DEV_CHANGE_NTF follows once the
- * identity changed, even when the enable op then fails.
+ * address every ONU. The disabled setting restores the emergency stop state
+ * O7 of G.9807.1 Table C.12.1 (which persists over a reboot) and is accepted
+ * only while the link is disabled. A PON_CMD_DEV_CHANGE_NTF follows
+ * once the identity changed, even when the enable op then fails.
  *
  * Context: Called with the device lock held by pon_device_get_locked().
  * Return: 0, or a negative errno.
@@ -520,8 +527,19 @@ static int pon_nl_dev_set(struct genl_info *info, struct pon_identity *id)
 		nla_memcpy(id->reg_id, reg_id, PON_REG_ID_LEN);
 		id->reg_id_len = PON_REG_ID_LEN;
 	}
+	if (info->attrs[PON_A_DEV_DISABLED]) {
+		if (pdev->enabled) {
+			NL_SET_ERR_MSG_ATTR(info->extack,
+					    info->attrs[PON_A_DEV_DISABLED],
+					    "the disabled state cannot change while the link is enabled");
+			return -EBUSY;
+		}
+		/* ITU-T G.9807.1 Table C.12.1: only the OLT releases O7 */
+		id->disabled = true;
+	}
 
-	identity = id->mode_set || id->serial_set || id->reg_id_len;
+	identity = id->mode_set || id->serial_set || id->reg_id_len ||
+		   id->disabled;
 
 	if (!identity && !info->attrs[PON_A_DEV_ENABLE]) {
 		NL_SET_ERR_MSG(info->extack, "no settings present");

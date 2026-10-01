@@ -41,12 +41,13 @@ static const struct nla_policy pon_dev_get_nl_policy[PON_A_DEV_ID + 1] = {
 };
 
 /* PON_CMD_DEV_SET - do */
-static const struct nla_policy pon_dev_set_nl_policy[PON_A_DEV_ENABLE + 1] = {
+static const struct nla_policy pon_dev_set_nl_policy[PON_A_DEV_DISABLED + 1] = {
 	[PON_A_DEV_ID] = NLA_POLICY_MIN(NLA_U32, 1),
 	[PON_A_DEV_MODE] = NLA_POLICY_MAX(NLA_U32, 2),
 	[PON_A_DEV_SERIAL] = NLA_POLICY_EXACT_LEN(8),
 	[PON_A_DEV_REGISTRATION_ID] = NLA_POLICY_MAX_LEN(36),
 	[PON_A_DEV_ENABLE] = NLA_POLICY_MAX(NLA_U8, 1),
+	[PON_A_DEV_DISABLED] = { .type = NLA_FLAG, },
 };
 
 /* PON_CMD_TCONT_GET - do */
@@ -183,7 +184,7 @@ static const struct genl_split_ops pon_nl_ops[] = {
 		.doit		= pon_nl_dev_set_doit,
 		.post_doit	= pon_device_unlock,
 		.policy		= pon_dev_set_nl_policy,
-		.maxattr	= PON_A_DEV_ENABLE,
+		.maxattr	= PON_A_DEV_DISABLED,
 		.flags		= GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
 	},
 	{
