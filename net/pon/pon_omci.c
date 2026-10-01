@@ -77,22 +77,53 @@ static bool pon_omci_framing_valid(const u8 *pdu, unsigned int len)
 }
 
 /**
+ * pon_omci_rx_drop() - drop a received OMCI PDU that could not be taken
+ * @pdev:	PON device structure
+ * @skb:	the PDU, which is freed
+ *
+ * Counts the PDU in @pdev->omci_rx_dropped.
+ *
+ * Context: Any context.
+ */
+static void pon_omci_rx_drop(struct pon_dev *pdev, struct sk_buff *skb)
+{
+	atomic64_inc(&pdev->omci_rx_dropped);
+	kfree_skb(skb);
+}
+
+/**
+ * pon_omci_rx_error() - drop a received OMCI PDU that failed its check
+ * @pdev:	PON device structure
+ * @skb:	the PDU, which is freed
+ *
+ * Counts the PDU in @pdev->omci_rx_errors.
+ *
+ * Context: Any context.
+ */
+static void pon_omci_rx_error(struct pon_dev *pdev, struct sk_buff *skb)
+{
+	atomic64_inc(&pdev->omci_rx_errors);
+	kfree_skb(skb);
+}
+
+/**
  * pon_omci_deliver() - hand one OMCI PDU to the owner of the OMCI channel
  * @pdev:	PON device structure
  * @skb:	the verified PDU, which is consumed
  *
  * A PDU that cannot be sent to the owner, or that arrives while no socket
- * owns the channel, is dropped.
+ * owns the channel, is counted as dropped.
  *
  * Context: The instance's context, with @pdev->lock held.
  */
 static void pon_omci_deliver(struct pon_dev *pdev, struct sk_buff *skb)
 {
 	if (pon_nl_omci_ntf(pdev, skb)) {
-		kfree_skb(skb);
+		pon_omci_rx_drop(pdev, skb);
 		return;
 	}
 
+	pdev->omci_rx++;
 	consume_skb(skb);
 }
 
@@ -102,16 +133,22 @@ static void pon_omci_deliver(struct pon_dev *pdev, struct sk_buff *skb)
  * @skb:	the PDU the MAC passed up unchecked, ending with its MIC
  *
  * The driver's omci_verify callback checks and strips the MIC (ITU-T
- * G.9807.1 clause C.15.7.2). A PDU that fails is freed. A PDU that cannot be
- * made linear is freed too, because its integrity was never checked.
+ * G.9807.1 clause C.15.7.2). A PDU that fails is freed and counted as an
+ * error. A PDU that cannot be made linear is freed and counted as dropped,
+ * because its integrity was never checked.
  *
  * Context: The instance's context, with @pdev->lock held.
  * Return: true when the PDU passed and is now bare, false when it is gone.
  */
 static bool pon_omci_rx_verify(struct pon_dev *pdev, struct sk_buff *skb)
 {
-	if (skb_linearize(skb) || pdev->ops->omci_verify(pdev, skb)) {
-		kfree_skb(skb);
+	if (skb_linearize(skb)) {
+		pon_omci_rx_drop(pdev, skb);
+		return false;
+	}
+
+	if (pdev->ops->omci_verify(pdev, skb)) {
+		pon_omci_rx_error(pdev, skb);
 		return false;
 	}
 
@@ -164,10 +201,18 @@ int pon_omci_conduit_rx(struct pon_dev *pdev, struct sk_buff *skb,
 			bool unverified)
 {
 	if (!pon_omci_len_valid(skb->len, unverified ? PON_OMCI_MIC_LEN : 0) ||
-	    !READ_ONCE(pdev->omci_portid) ||
-	    (unverified && !pdev->ops->omci_verify) ||
-	    skb_queue_len_lockless(&pdev->omci_rxq) >= PON_OMCI_QUEUE_MAX) {
-		kfree_skb(skb);
+	    !READ_ONCE(pdev->omci_portid)) {
+		pon_omci_rx_drop(pdev, skb);
+		return 0;
+	}
+
+	if (unverified && !pdev->ops->omci_verify) {
+		pon_omci_rx_error(pdev, skb);
+		return 0;
+	}
+
+	if (skb_queue_len_lockless(&pdev->omci_rxq) >= PON_OMCI_QUEUE_MAX) {
+		pon_omci_rx_drop(pdev, skb);
 		return 0;
 	}
 
@@ -220,6 +265,11 @@ int pon_omci_xmit(struct pon_dev *pdev, const void *pdu, unsigned int len,
 	local_bh_disable();
 	err = pdev->ops->omci_xmit(pdev, skb);
 	local_bh_enable();
+
+	if (err)
+		pdev->omci_tx_errors++;
+	else
+		pdev->omci_tx++;
 
 	return err;
 }

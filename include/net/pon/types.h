@@ -231,6 +231,105 @@ struct pon_fec_totals {
 	bool rebase;
 };
 
+#define PON_STAT_NOT_SET	(~0ULL)
+
+/**
+ * struct pon_tc_stats - counters of the transmission convergence layer
+ * @psbd_hec_errors: HEC errors in the fields of the downstream physical
+ *	synchronization block
+ * @xgtc_hec_errors: HEC errors in the XGTC header, which ITU-T G.9807.1 names
+ *	the framing sublayer header
+ * @unknown_profiles: grants that name a burst profile the ONU does not hold
+ * @tx_xgem_frames: XGEM frames sent, idle frames left out. Each fragment of
+ *	a fragmented frame counts
+ * @tx_xgem_fragments: XGEM frames sent that are not the last fragment
+ * @xgem_hec_lost_words: words of 4 bytes lost after an XGEM header HEC error
+ * @xgem_key_errors: XGEM frames received with a key index that is not valid
+ * @xgem_hec_errors: XGEM header HEC errors
+ * @tx_xgem_bytes: bytes sent in XGEM frames, idle frames left out
+ * @rx_xgem_bytes: bytes received in XGEM frames, idle frames left out
+ * @lods_events: losses of downstream synchronization, the edges O5 to O6
+ * @lods_restored: losses that ended with the synchronization back, the edges
+ *	O6 to O5
+ * @lods_reactivations: losses that ended in a new activation, the edges O6
+ *	to O1
+ * @ploam_mic_errors: downstream PLOAM messages with a wrong MIC
+ * @omci_mic_errors: downstream OMCI messages with a wrong MIC
+ * @rx_ploam: downstream PLOAM messages received
+ * @rx_burst_profile: Burst_Profile messages received
+ * @rx_ranging_time: Ranging_Time messages received
+ * @rx_deactivate_onu_id: Deactivate_ONU-ID messages received
+ * @rx_disable_serial_number: Disable_Serial_Number messages received that
+ *	name the serial number of this ONU
+ * @rx_request_registration: Request_Registration messages received
+ * @rx_assign_alloc_id: Assign_Alloc-ID messages received
+ * @rx_key_control: Key_Control messages received
+ * @rx_sleep_allow: Sleep_Allow messages received
+ * @rx_assign_onu_id: Assign_ONU-ID messages received
+ * @tx_ploam: upstream PLOAM messages sent, acknowledgments left out
+ * @tx_serial_number_onu: Serial_Number_ONU messages sent
+ * @tx_registration: Registration messages sent
+ * @tx_key_report: Key_Report messages sent
+ * @tx_acknowledge: Acknowledgment messages sent
+ * @tx_sleep_request: Sleep_Request messages sent
+ * @omci_rx: OMCI PDUs handed to the owner of the OMCI channel
+ * @omci_rx_dropped: OMCI PDUs from the OLT that did not reach an owner
+ * @omci_rx_errors: OMCI PDUs that the MAC passed up unchecked and that failed
+ *	the integrity check
+ * @omci_tx: OMCI PDUs the driver took
+ * @omci_tx_errors: OMCI PDUs the driver refused
+ *
+ * Every member is a 64 bit total that never goes back. A member the driver
+ * does not keep stays PON_STAT_NOT_SET and the core leaves it out of the
+ * reply. The core fills the three LODS members and the five OMCI members
+ * itself.
+ *
+ * The members from @psbd_hec_errors to @lods_reactivations mirror the ITU-T
+ * G.988 clause 9.2.15 XG-PON TC PM history data, @ploam_mic_errors,
+ * @omci_mic_errors and @rx_ploam to @rx_assign_onu_id mirror clause 9.2.16
+ * XG-PON downstream management PM history data and @tx_ploam to
+ * @tx_sleep_request mirror clause 9.2.17 XG-PON upstream management PM
+ * history data.
+ */
+struct pon_tc_stats {
+	u64 psbd_hec_errors;
+	u64 xgtc_hec_errors;
+	u64 unknown_profiles;
+	u64 tx_xgem_frames;
+	u64 tx_xgem_fragments;
+	u64 xgem_hec_lost_words;
+	u64 xgem_key_errors;
+	u64 xgem_hec_errors;
+	u64 tx_xgem_bytes;
+	u64 rx_xgem_bytes;
+	u64 lods_events;
+	u64 lods_restored;
+	u64 lods_reactivations;
+	u64 ploam_mic_errors;
+	u64 omci_mic_errors;
+	u64 rx_ploam;
+	u64 rx_burst_profile;
+	u64 rx_ranging_time;
+	u64 rx_deactivate_onu_id;
+	u64 rx_disable_serial_number;
+	u64 rx_request_registration;
+	u64 rx_assign_alloc_id;
+	u64 rx_key_control;
+	u64 rx_sleep_allow;
+	u64 rx_assign_onu_id;
+	u64 tx_ploam;
+	u64 tx_serial_number_onu;
+	u64 tx_registration;
+	u64 tx_key_report;
+	u64 tx_acknowledge;
+	u64 tx_sleep_request;
+	u64 omci_rx;
+	u64 omci_rx_dropped;
+	u64 omci_rx_errors;
+	u64 omci_tx;
+	u64 omci_tx_errors;
+};
+
 /**
  * struct pon_dev_caps - what the device supports
  * @modes: bitmask of enum pon_mode the hardware can run
@@ -325,10 +424,22 @@ struct pon_conduit_ops {
  *	      it up unchecked
  * @omci_rx_work: has the driver verify the unchecked PDUs of @omci_rxq and
  *		  hands every PDU to the owner of the OMCI channel
+ * @omci_rx: OMCI PDUs handed to the owner
+ * @omci_rx_dropped: OMCI PDUs that did not reach an owner, counted from the
+ *		     conduit's receive path too
+ * @omci_rx_errors: OMCI PDUs that failed the integrity check, counted from
+ *		    the conduit's receive path too
+ * @omci_tx: OMCI PDUs the driver took
+ * @omci_tx_errors: OMCI PDUs the driver refused
  * @fec: the FEC counters accumulated across the driver's 32 bit wraps
  * @fec_work: folds the driver's FEC counters into @fec every ten seconds
  *	      while the device is registered, when the driver has a fec_stats
  *	      callback
+ * @lods_events: losses of downstream synchronization, the edges O5 to O6
+ * @lods_restored: losses that ended with the synchronization back, the edges
+ *		   O6 to O5
+ * @lods_reactivations: losses that ended in a new activation, the edges O6
+ *			to O1
  * @identity: the serial number as dev-set last delivered it, which dev-get
  *	      reports. The registration id goes to the driver and is not kept
  * @identity.serial: serial number, valid when @identity.serial_set
@@ -403,8 +514,16 @@ struct pon_dev {
 	unsigned int log_head;
 	unsigned int log_count;
 	unsigned int log_dropped;
+	u64 omci_rx;
+	atomic64_t omci_rx_dropped;
+	atomic64_t omci_rx_errors;
+	u64 omci_tx;
+	u64 omci_tx_errors;
 	struct pon_fec_totals fec;
 	struct pon_delayed_work fec_work;
+	u64 lods_events;
+	u64 lods_restored;
+	u64 lods_reactivations;
 	struct work_struct tc_work;
 	DECLARE_BITMAP(ets_stale, PON_TX_CHANNELS);
 	bool going_away;
@@ -509,6 +628,16 @@ struct pon_dev_ops {
 	 * goes back only when it wraps. Instance lock held.
 	 */
 	int (*fec_stats)(struct pon_dev *pdev, struct pon_fec_stats *stats);
+
+	/**
+	 * @tc_stats: read the counters of the transmission convergence layer,
+	 *	      optional. Every member arrives as PON_STAT_NOT_SET and the
+	 *	      driver sets the ones it keeps, as 64 bit totals that never
+	 *	      go back. The three LODS members and the five OMCI members
+	 *	      are the core's and without the callback they are all that
+	 *	      the core reports. Instance lock held.
+	 */
+	int (*tc_stats)(struct pon_dev *pdev, struct pon_tc_stats *stats);
 
 	/**
 	 * @gem_xmit: send one frame on a GEM port, optional. Consumes the skb

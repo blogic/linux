@@ -322,6 +322,30 @@ void pon_dev_log(struct pon_dev *pdev, const char *fmt, ...)
 EXPORT_SYMBOL_GPL(pon_dev_log);
 
 /**
+ * pon_dev_lods_count() - count the LODS edges of the activation state
+ * @pdev:	PON device structure
+ * @from:	the state being left, enum pon_ploam_state
+ * @to:		the state being entered, enum pon_ploam_state
+ *
+ * O5 to O6 is a loss of downstream synchronization, O6 to O5 a loss that
+ * ended with the synchronization back and O6 to O1 a loss that ended in a
+ * new activation. These are the LODS event count, the LODS event restored
+ * count and the ONU reactivation by LODS events of ITU-T G.988 clause 9.2.23
+ * and clause 9.2.15.
+ *
+ * Context: Called with @pdev->lock held.
+ */
+static void pon_dev_lods_count(struct pon_dev *pdev, u32 from, u32 to)
+{
+	if (from == PON_PLOAM_STATE_O5 && to == PON_PLOAM_STATE_O6)
+		pdev->lods_events++;
+	else if (from == PON_PLOAM_STATE_O6 && to == PON_PLOAM_STATE_O5)
+		pdev->lods_restored++;
+	else if (from == PON_PLOAM_STATE_O6 && to == PON_PLOAM_STATE_O1)
+		pdev->lods_reactivations++;
+}
+
+/**
  * pon_dev_state_report() - report the activation state the MAC reached
  * @pdev:	PON device structure
  * @state:	the new state, enum pon_ploam_state
@@ -371,6 +395,7 @@ int pon_dev_state_report(struct pon_dev *pdev, enum pon_ploam_state state)
 	pon_dev_log(pdev, "PLOAM state %s -> %s",
 		    pon_dev_state_name(pdev, old),
 		    pon_dev_state_name(pdev, state));
+	pon_dev_lods_count(pdev, old, state);
 
 	/* Carrier before the notification, so a daemon that reads both sees a
 	 * netdev that agrees with the state. rtnetlink and generic netlink

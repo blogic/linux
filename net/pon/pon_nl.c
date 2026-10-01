@@ -19,6 +19,51 @@ static const char *const pon_nl_mode_names[] = {
 	[PON_MODE_XGS_PON]	= "xgs-pon",
 };
 
+#define PON_NL_TC_STAT(attr, member)					\
+	{ PON_A_TC_STATS_##attr, offsetof(struct pon_tc_stats, member) }
+
+static const struct {
+	u16 attr;
+	u16 offset;
+} pon_nl_tc_stats_map[] = {
+	PON_NL_TC_STAT(PSBD_HEC_ERRORS, psbd_hec_errors),
+	PON_NL_TC_STAT(XGTC_HEC_ERRORS, xgtc_hec_errors),
+	PON_NL_TC_STAT(UNKNOWN_PROFILES, unknown_profiles),
+	PON_NL_TC_STAT(TX_XGEM_FRAMES, tx_xgem_frames),
+	PON_NL_TC_STAT(TX_XGEM_FRAGMENTS, tx_xgem_fragments),
+	PON_NL_TC_STAT(XGEM_HEC_LOST_WORDS, xgem_hec_lost_words),
+	PON_NL_TC_STAT(XGEM_KEY_ERRORS, xgem_key_errors),
+	PON_NL_TC_STAT(XGEM_HEC_ERRORS, xgem_hec_errors),
+	PON_NL_TC_STAT(TX_XGEM_BYTES, tx_xgem_bytes),
+	PON_NL_TC_STAT(RX_XGEM_BYTES, rx_xgem_bytes),
+	PON_NL_TC_STAT(LODS_EVENTS, lods_events),
+	PON_NL_TC_STAT(LODS_RESTORED, lods_restored),
+	PON_NL_TC_STAT(LODS_REACTIVATIONS, lods_reactivations),
+	PON_NL_TC_STAT(PLOAM_MIC_ERRORS, ploam_mic_errors),
+	PON_NL_TC_STAT(OMCI_MIC_ERRORS, omci_mic_errors),
+	PON_NL_TC_STAT(RX_PLOAM, rx_ploam),
+	PON_NL_TC_STAT(RX_BURST_PROFILE, rx_burst_profile),
+	PON_NL_TC_STAT(RX_RANGING_TIME, rx_ranging_time),
+	PON_NL_TC_STAT(RX_DEACTIVATE_ONU_ID, rx_deactivate_onu_id),
+	PON_NL_TC_STAT(RX_DISABLE_SERIAL_NUMBER, rx_disable_serial_number),
+	PON_NL_TC_STAT(RX_REQUEST_REGISTRATION, rx_request_registration),
+	PON_NL_TC_STAT(RX_ASSIGN_ALLOC_ID, rx_assign_alloc_id),
+	PON_NL_TC_STAT(RX_KEY_CONTROL, rx_key_control),
+	PON_NL_TC_STAT(RX_SLEEP_ALLOW, rx_sleep_allow),
+	PON_NL_TC_STAT(RX_ASSIGN_ONU_ID, rx_assign_onu_id),
+	PON_NL_TC_STAT(TX_PLOAM, tx_ploam),
+	PON_NL_TC_STAT(TX_SERIAL_NUMBER_ONU, tx_serial_number_onu),
+	PON_NL_TC_STAT(TX_REGISTRATION, tx_registration),
+	PON_NL_TC_STAT(TX_KEY_REPORT, tx_key_report),
+	PON_NL_TC_STAT(TX_ACKNOWLEDGE, tx_acknowledge),
+	PON_NL_TC_STAT(TX_SLEEP_REQUEST, tx_sleep_request),
+	PON_NL_TC_STAT(OMCI_RX, omci_rx),
+	PON_NL_TC_STAT(OMCI_RX_DROPPED, omci_rx_dropped),
+	PON_NL_TC_STAT(OMCI_RX_ERRORS, omci_rx_errors),
+	PON_NL_TC_STAT(OMCI_TX, omci_tx),
+	PON_NL_TC_STAT(OMCI_TX_ERRORS, omci_tx_errors),
+};
+
 /* The object dumps walk every device the caller's namespace can see, or the
  * one device the request names and within a device one list. A dump that
  * fills its skb stops at the object it could not fit and resumes there:
@@ -195,6 +240,7 @@ int pon_device_get_locked(const struct genl_split_ops *ops,
 		     (int)PON_A_DEV_ID != (int)PON_A_GEM_MAP_DEV_ID ||
 		     (int)PON_A_DEV_ID != (int)PON_A_GEM_STATS_DEV_ID ||
 		     (int)PON_A_DEV_ID != (int)PON_A_FEC_DEV_ID ||
+		     (int)PON_A_DEV_ID != (int)PON_A_TC_STATS_DEV_ID ||
 		     (int)PON_A_DEV_ID != (int)PON_A_OMCI_DEV_ID);
 
 	if (!id) {
@@ -1685,6 +1731,112 @@ int pon_nl_fec_get_doit(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	return pon_nl_dev_reply(info, pon_nl_fec_fill);
+}
+
+/**
+ * pon_nl_tc_stats_read() - collect the TC layer counters of a device
+ * @pdev: the PON device
+ * @stats: receives the counters
+ *
+ * Every counter starts as PON_STAT_NOT_SET. The driver fills those it has
+ * through the optional tc_stats op and the core adds the LODS and OMCI
+ * counters it keeps itself.
+ *
+ * Context: Called with @pdev->lock held.
+ * Return: 0, or the error of the tc_stats op.
+ */
+static int pon_nl_tc_stats_read(struct pon_dev *pdev,
+				struct pon_tc_stats *stats)
+{
+	int err;
+
+	memset(stats, 0xff, sizeof(*stats));
+
+	if (pdev->ops->tc_stats) {
+		err = pdev->ops->tc_stats(pdev, stats);
+		if (err)
+			return err;
+	}
+
+	stats->lods_events = pdev->lods_events;
+	stats->lods_restored = pdev->lods_restored;
+	stats->lods_reactivations = pdev->lods_reactivations;
+	stats->omci_rx = pdev->omci_rx;
+	stats->omci_rx_dropped = atomic64_read(&pdev->omci_rx_dropped);
+	stats->omci_rx_errors = atomic64_read(&pdev->omci_rx_errors);
+	stats->omci_tx = pdev->omci_tx;
+	stats->omci_tx_errors = pdev->omci_tx_errors;
+
+	return 0;
+}
+
+/**
+ * pon_nl_tc_stats_fill() - put the TC layer counters of a device into an skb
+ * @pdev: the PON device
+ * @rsp: the skb to fill
+ * @info: the request info
+ *
+ * A counter that stays PON_STAT_NOT_SET is left out. The counters follow
+ * three managed entities of ITU-T G.988: the XG-PON TC performance
+ * monitoring history data of clause 9.2.15, the XG-PON downstream
+ * management performance monitoring history data of clause 9.2.16 and the
+ * XG-PON upstream management performance monitoring history data of clause
+ * 9.2.17.
+ *
+ * Context: Called with @pdev->lock held.
+ * Return: 0, the error of pon_nl_tc_stats_read(), or -EMSGSIZE when the
+ * message does not fit.
+ */
+static int
+pon_nl_tc_stats_fill(struct pon_dev *pdev, struct sk_buff *rsp,
+		     const struct genl_info *info)
+{
+	struct pon_tc_stats stats;
+	unsigned int i;
+	void *hdr;
+	int err;
+
+	err = pon_nl_tc_stats_read(pdev, &stats);
+	if (err)
+		return err;
+
+	hdr = genlmsg_iput(rsp, info);
+	if (!hdr)
+		return -EMSGSIZE;
+
+	if (nla_put_u32(rsp, PON_A_TC_STATS_DEV_ID, pdev->id))
+		goto err_cancel_msg;
+
+	for (i = 0; i < ARRAY_SIZE(pon_nl_tc_stats_map); i++) {
+		u64 val;
+
+		memcpy(&val, (u8 *)&stats + pon_nl_tc_stats_map[i].offset,
+		       sizeof(val));
+		if (val == PON_STAT_NOT_SET)
+			continue;
+		if (nla_put_uint(rsp, pon_nl_tc_stats_map[i].attr, val))
+			goto err_cancel_msg;
+	}
+
+	genlmsg_end(rsp, hdr);
+	return 0;
+
+err_cancel_msg:
+	genlmsg_cancel(rsp, hdr);
+	return -EMSGSIZE;
+}
+
+/**
+ * pon_nl_tc_stats_get_doit() - handle PON_CMD_TC_STATS_GET
+ * @skb: the request
+ * @info: the request info, user_ptr[0] holds the device
+ *
+ * Context: Called with the device lock held by pon_device_get_locked().
+ * Return: 0, or a negative errno.
+ */
+int pon_nl_tc_stats_get_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	return pon_nl_dev_reply(info, pon_nl_tc_stats_fill);
 }
 
 /**

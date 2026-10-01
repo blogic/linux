@@ -433,6 +433,182 @@ attribute-sets:
           Seconds in which at least one uncorrectable FEC codeword was
           received (ITU-T G.988 clause 9.2.9), monotonic.
         type: uint
+  -
+    name: tc-stats
+    attributes:
+      -
+        name: dev-id
+        doc: PON device ID.
+        type: u32
+        checks:
+          min: 1
+      -
+        name: psbd-hec-errors
+        doc: |
+          HEC errors in the fields of the downstream physical
+          synchronization block, monotonic.
+        type: uint
+      -
+        name: xgtc-hec-errors
+        doc: |
+          HEC errors in the XGTC header, which ITU-T G.9807.1 names the
+          framing sublayer header, monotonic.
+        type: uint
+      -
+        name: unknown-profiles
+        doc: Grants that name a burst profile the ONU does not hold, monotonic.
+        type: uint
+      -
+        name: tx-xgem-frames
+        doc: |
+          XGEM frames sent, idle frames left out. Each fragment of a
+          fragmented frame counts. Monotonic.
+        type: uint
+      -
+        name: tx-xgem-fragments
+        doc: XGEM frames sent that are not the last fragment, monotonic.
+        type: uint
+      -
+        name: xgem-hec-lost-words
+        doc: Words of 4 bytes lost after an XGEM header HEC error, monotonic.
+        type: uint
+      -
+        name: xgem-key-errors
+        doc: XGEM frames received with a key index that is not valid, monotonic.
+        type: uint
+      -
+        name: xgem-hec-errors
+        doc: XGEM header HEC errors, monotonic.
+        type: uint
+      -
+        name: tx-xgem-bytes
+        doc: Bytes sent in XGEM frames, idle frames left out, monotonic.
+        type: uint
+      -
+        name: rx-xgem-bytes
+        doc: Bytes received in XGEM frames, idle frames left out, monotonic.
+        type: uint
+      -
+        name: lods-events
+        doc: |
+          Losses of downstream synchronization, the edges O5 to O6,
+          monotonic.
+        type: uint
+      -
+        name: lods-restored
+        doc: |
+          Losses of downstream synchronization that ended with the
+          synchronization back, the edges O6 to O5, monotonic.
+        type: uint
+      -
+        name: lods-reactivations
+        doc: |
+          Losses of downstream synchronization that ended in a new
+          activation, the edges O6 to O1, monotonic.
+        type: uint
+      -
+        name: ploam-mic-errors
+        doc: Downstream PLOAM messages with a wrong MIC, monotonic.
+        type: uint
+      -
+        name: omci-mic-errors
+        doc: Downstream OMCI messages with a wrong MIC, monotonic.
+        type: uint
+      -
+        name: rx-ploam
+        doc: Downstream PLOAM messages received, monotonic.
+        type: uint
+      -
+        name: rx-burst-profile
+        doc: Burst_Profile messages received, monotonic.
+        type: uint
+      -
+        name: rx-ranging-time
+        doc: Ranging_Time messages received, monotonic.
+        type: uint
+      -
+        name: rx-deactivate-onu-id
+        doc: Deactivate_ONU-ID messages received, monotonic.
+        type: uint
+      -
+        name: rx-disable-serial-number
+        doc: |
+          Disable_Serial_Number messages received that name the serial
+          number of this ONU, monotonic.
+        type: uint
+      -
+        name: rx-request-registration
+        doc: Request_Registration messages received, monotonic.
+        type: uint
+      -
+        name: rx-assign-alloc-id
+        doc: Assign_Alloc-ID messages received, monotonic.
+        type: uint
+      -
+        name: rx-key-control
+        doc: Key_Control messages received, monotonic.
+        type: uint
+      -
+        name: rx-sleep-allow
+        doc: Sleep_Allow messages received, monotonic.
+        type: uint
+      -
+        name: rx-assign-onu-id
+        doc: Assign_ONU-ID messages received, monotonic.
+        type: uint
+      -
+        name: tx-ploam
+        doc: |
+          Upstream PLOAM messages sent, acknowledgments left out,
+          monotonic.
+        type: uint
+      -
+        name: tx-serial-number-onu
+        doc: Serial_Number_ONU messages sent, monotonic.
+        type: uint
+      -
+        name: tx-registration
+        doc: Registration messages sent, monotonic.
+        type: uint
+      -
+        name: tx-key-report
+        doc: Key_Report messages sent, monotonic.
+        type: uint
+      -
+        name: tx-acknowledge
+        doc: Acknowledgment messages sent, monotonic.
+        type: uint
+      -
+        name: tx-sleep-request
+        doc: Sleep_Request messages sent, monotonic.
+        type: uint
+      -
+        name: omci-rx
+        doc: OMCI PDUs handed to the registered socket, monotonic.
+        type: uint
+      -
+        name: omci-rx-dropped
+        doc: |
+          OMCI PDUs from the OLT that no socket received: none was
+          registered, the queue towards it was full, or the socket had no
+          room left. Monotonic.
+        type: uint
+      -
+        name: omci-rx-errors
+        doc: |
+          OMCI PDUs that the MAC passed up unchecked and that failed the
+          integrity check, monotonic.
+        type: uint
+      -
+        name: omci-tx
+        doc: OMCI PDUs handed to the MAC for the OLT, monotonic.
+        type: uint
+      -
+        name: omci-tx-errors
+        doc: |
+          OMCI PDUs from the registered socket that the MAC refused,
+          monotonic.
+        type: uint
 operations:
   list:
     -
@@ -807,6 +983,63 @@ operations:
             - corrected-bytes
             - total-codewords
             - seconds
+        pre: pon-device-get-locked
+        post: pon-device-unlock
+
+    -
+      name: tc-stats-get
+      doc: |
+        Get the counters of the transmission convergence layer of one
+        device: the header and key errors, the XGEM totals, the losses of
+        downstream synchronization and the PLOAM messages by type. ITU-T
+        G.988 reports them through the XG-PON TC, the downstream management
+        and the upstream management performance monitoring managed entities.
+        A counter that the device does not keep is absent. There is no dump.
+        Enumerate the devices with dev-get.
+      attribute-set: tc-stats
+      do:
+        request:
+          attributes:
+            - dev-id
+        reply:
+          attributes:
+            - dev-id
+            - psbd-hec-errors
+            - xgtc-hec-errors
+            - unknown-profiles
+            - tx-xgem-frames
+            - tx-xgem-fragments
+            - xgem-hec-lost-words
+            - xgem-key-errors
+            - xgem-hec-errors
+            - tx-xgem-bytes
+            - rx-xgem-bytes
+            - lods-events
+            - lods-restored
+            - lods-reactivations
+            - ploam-mic-errors
+            - omci-mic-errors
+            - rx-ploam
+            - rx-burst-profile
+            - rx-ranging-time
+            - rx-deactivate-onu-id
+            - rx-disable-serial-number
+            - rx-request-registration
+            - rx-assign-alloc-id
+            - rx-key-control
+            - rx-sleep-allow
+            - rx-assign-onu-id
+            - tx-ploam
+            - tx-serial-number-onu
+            - tx-registration
+            - tx-key-report
+            - tx-acknowledge
+            - tx-sleep-request
+            - omci-rx
+            - omci-rx-dropped
+            - omci-rx-errors
+            - omci-tx
+            - omci-tx-errors
         pre: pon-device-get-locked
         post: pon-device-unlock
 

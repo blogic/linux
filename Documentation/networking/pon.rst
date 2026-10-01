@@ -194,9 +194,9 @@ Ethernet header and the core knows that port, so there is nothing to
 classify.
 
 A received PDU waits in the instance's context until it reaches the owner. A
-PDU that finds no owner, a full queue or a full socket is dropped. The OLT
-retries. The exchange can be captured on an ``nlmon`` device like any other
-netlink traffic.
+PDU that finds no owner, a full queue or a full socket is dropped and counted.
+The OLT retries. The counters are in ``tc-stats-get``. The exchange can be
+captured on an ``nlmon`` device like any other netlink traffic.
 
 No OMCI managed entity is modeled in the kernel. The daemon reads the OLT's
 intent from the MIB and expresses it through the netlink family below.
@@ -302,6 +302,7 @@ it. Every object can be listed, watched and read back:
 ``gem-map-get``    classifier rules, a dump
 ``gem-stats-get``  per GEM port counters, with a dump
 ``fec-get``        the FEC counters of one device
+``tc-stats-get``   the TC layer counters of one device
 =================  ==============================================
 
 Notifications share the reply format of the matching get, so a listener parses
@@ -324,6 +325,18 @@ GEM port, which is why they are a separate operation with no dump. Enumerate
 the devices with ``dev-get``. The same totals reach ``ethtool --show-fec`` on
 the data interface as corrected and uncorrectable blocks, beside the encoding
 in use, so a reader without the family sees them too.
+
+``tc-stats-get`` returns the counters of the transmission convergence layer
+of a device: the HEC and key errors, the XGEM frame and byte totals, the
+losses of downstream synchronization and the PLOAM messages by type. They are
+what the XG-PON TC, the downstream management and the upstream management
+performance monitoring entities of G.988 report. Every counter is a 64 bit
+total that never goes back. The driver folds its latches often enough that
+none of them wraps unseen. The core counts the losses of downstream
+synchronization itself, from the activation states the driver reports and
+the OMCI PDUs of the OMCI channel in both directions, with those dropped and
+those the MAC refused. A counter that the device does not keep is absent from
+the reply, which is how a reader tells it from a counter that stands at zero.
 
 ``omci-register``, ``omci-tx`` and ``omci-ntf`` are the OMCI channel, described
 above. ``omci-ntf`` goes to the owner of the channel alone and to no
