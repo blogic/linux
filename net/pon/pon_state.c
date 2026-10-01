@@ -142,11 +142,11 @@ static bool pon_dev_gem_bound(struct pon_dev *pdev)
  * the instance and at least one GEM port rides a T-CONT that has a transmit
  * channel, as the driver's tcont_channel callback answers. That includes
  * the default alloc-id, which carries data too and which the driver binds
- * without an alloc-id event. Without the callback a GEM port is enough.
+ * without a tcont-alloc event. Without the callback a GEM port is enough.
  * The GEM network devices follow the data netdev.
  *
- * Called on every change that can alter the answer: an activation edge, an
- * alloc-id event, a T-CONT or a GEM port that is set or deleted and a
+ * Called on every change that can alter the answer: an activation edge, a
+ * tcont-alloc event, a T-CONT or a GEM port that is set or deleted and a
  * conduit that pairs, goes up, goes down or leaves.
  */
 void pon_dev_carrier_update(struct pon_dev *pdev)
@@ -384,15 +384,15 @@ EXPORT_SYMBOL_GPL(pon_dev_state_report);
 /**
  * pon_dev_event() - report a discrete event
  * @pdev:	PON device structure
- * @ev:		what happened and the alloc-id it names
+ * @ev:		what happened and the arguments of its type
  *
  * Runs in the instance's context, with its lock held.
  *
- * A PON_EVENT_TYPE_TCONT_ALLOC event means the driver bound the alloc-id to
- * a channel, so the GEM ports that ride it carry traffic from then on: the
- * carrier may rise. A PON_EVENT_TYPE_TCONT_DEALLOC event means the driver
- * released the channel: the carrier may fall. An event that arrives once
- * pon_dev_unregister() has begun is dropped.
+ * A tcont-alloc event means the driver bound the alloc-id to a channel, so
+ * the GEM ports that ride it carry traffic from then on: the carrier may
+ * rise. A tcont-dealloc event means the driver released the channel: the
+ * carrier may fall. An event that arrives once pon_dev_unregister() has
+ * begun is dropped.
  */
 void pon_dev_event(struct pon_dev *pdev, const struct pon_event *ev)
 {
@@ -404,5 +404,7 @@ void pon_dev_event(struct pon_dev *pdev, const struct pon_event *ev)
 	if (ev->type == PON_EVENT_TYPE_TCONT_ALLOC ||
 	    ev->type == PON_EVENT_TYPE_TCONT_DEALLOC)
 		pon_dev_carrier_update(pdev);
+
+	pon_nl_notify_event(pdev, ev);
 }
 EXPORT_SYMBOL_GPL(pon_dev_event);

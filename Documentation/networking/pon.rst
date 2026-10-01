@@ -117,10 +117,9 @@ because nothing was taken away.
 
 What the ONU does discard are the alloc-ids (clause C.6.1.5.7). The OLT assigns
 them again over PLOAM once the ONU is back in O5 and the driver binds each one
-to a transmit channel and reports that to the core through
-``pon_dev_event()``. The default alloc-id, equal to the ONU-ID, is not assigned
-by a message. The driver binds it with the ONU-ID and it may carry user traffic
-as well as the OMCC. A GEM port whose
+to a transmit channel and reports ``tcont-alloc``. The default alloc-id, equal
+to the ONU-ID, is not assigned by a message. The driver binds it with the
+ONU-ID and it may carry user traffic as well as the OMCC. A GEM port whose
 alloc-id has no channel yet is held and carries no traffic. The carrier of the
 PON interfaces is up in O5 and O6 while at least one GEM port rides an alloc-id
 that has a channel and a conduit (see below) is paired with the device and up.
@@ -262,7 +261,12 @@ reader repeats the dump.
 above. ``omci-ntf`` goes to the owner of the channel alone and to no
 multicast group.
 
-``ploam-ntf`` reports every activation transition.
+``ploam-ntf`` reports every activation transition. ``event-ntf`` reports the
+things that genuinely happen once rather than lasting: a MIB reset request, a
+reboot request and the assignment and the deallocation of an alloc-id. Each
+type names its arguments, ``depth`` and ``image`` for the reboot request and
+``alloc-id`` for the alloc-id events, so a reader does not decode one number
+two ways.
 
 An operation is a ``set`` when it can change an object that already exists
 and a ``new`` when it can only create one. ``tcont-set`` rebinds a T-CONT,

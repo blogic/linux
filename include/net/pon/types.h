@@ -140,27 +140,29 @@ struct pon_gem_map_cfg {
 };
 
 /**
- * enum pon_event_type - what a driver reports through pon_dev_event()
- * @PON_EVENT_TYPE_TCONT_ALLOC: the OLT assigned an alloc-id with the
- *	Assign_Alloc-ID message of ITU-T G.9807.1 clause C.11.3.3.7 and the
- *	driver bound it to a transmit channel
- * @PON_EVENT_TYPE_TCONT_DEALLOC: the OLT deallocated the alloc-id with the
- *	same message and the driver released its channel. The GEM ports that
- *	ride it carry no upstream traffic until the OLT assigns it again
- */
-enum pon_event_type {
-	PON_EVENT_TYPE_TCONT_ALLOC,
-	PON_EVENT_TYPE_TCONT_DEALLOC,
-};
-
-/**
  * struct pon_event - a discrete event a driver reports
  * @type: what happened, enum pon_event_type
- * @alloc_id: the alloc-id the OLT allocated or deallocated
+ * @alloc_id: the Alloc-ID the OLT allocated or deallocated, for tcont-alloc
+ *	      and tcont-dealloc
+ * @reboot: the request of a Reboot_ONU message, for reboot-req and
+ *	    mib-reset-req (ITU-T G.9807.1 Table C.11.23A)
+ * @reboot.depth: the reboot depth, 1 to 3. A request of depth 0 is reported
+ *		  as mib-reset-req
+ * @reboot.image: the image to run after the reboot, 0 for the committed
+ *		  image and 1 for the other one
+ * @reboot.calls: the condition on calls in progress of octet 16, enum
+ *		  pon_reboot_calls, for mib-reset-req too
  */
 struct pon_event {
 	enum pon_event_type type;
-	u32 alloc_id;
+	union {
+		u32 alloc_id;
+		struct {
+			u8 depth;
+			u8 image;
+			u8 calls;
+		} reboot;
+	};
 };
 
 /**

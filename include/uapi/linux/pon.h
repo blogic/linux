@@ -35,6 +35,45 @@ enum pon_ploam_state {
 	PON_PLOAM_STATE_O7,
 };
 
+/**
+ * enum pon_event_type - Discrete events reported by the driver, each one a
+ *   thing that happened rather than a state. A PLOAM transition goes through
+ *   ploam-ntf.
+ * @PON_EVENT_TYPE_MIB_RESET_REQ: The OLT requested an OMCI MIB reset (reboot
+ *   request, depth 0).
+ * @PON_EVENT_TYPE_REBOOT_REQ: The OLT requested an ONU reboot. The depth
+ *   attribute says how deep, the image attribute which image to run after it
+ *   and the calls attribute on which condition.
+ * @PON_EVENT_TYPE_TCONT_ALLOC: The OLT allocated a T-CONT. The alloc-id
+ *   attribute names it.
+ * @PON_EVENT_TYPE_TCONT_DEALLOC: The OLT deallocated an alloc-id with
+ *   Assign_Alloc-ID of ITU-T G.9807.1. The alloc-id attribute names it. Its
+ *   GEM ports carry no upstream traffic until the OLT allocates it again.
+ */
+enum pon_event_type {
+	PON_EVENT_TYPE_MIB_RESET_REQ,
+	PON_EVENT_TYPE_REBOOT_REQ,
+	PON_EVENT_TYPE_TCONT_ALLOC,
+	PON_EVENT_TYPE_TCONT_DEALLOC,
+};
+
+/**
+ * enum pon_reboot_calls - The condition on calls in progress that a reboot
+ *   request carries, as the flags of the Reboot_ONU message of ITU-T G.9807.1
+ *   (Table C.11.23A, octet 16) define it. The kernel does not know the call
+ *   state. The userspace that acts on the request applies the condition.
+ * @PON_REBOOT_CALLS_ANY: Reboot regardless of the POTS or VoIP call state.
+ * @PON_REBOOT_CALLS_NO_CALLS: Reboot only if no POTS or VoIP call is in
+ *   progress.
+ * @PON_REBOOT_CALLS_NO_EMERGENCY_CALLS: Reboot only if no emergency call is in
+ *   progress.
+ */
+enum pon_reboot_calls {
+	PON_REBOOT_CALLS_ANY,
+	PON_REBOOT_CALLS_NO_CALLS,
+	PON_REBOOT_CALLS_NO_EMERGENCY_CALLS,
+};
+
 /*
  * GEM port direction. The values are those of the direction attribute of the
  * GEM port network CTP managed entity of ITU-T G.988: UNI-to-ANI (1),
@@ -130,6 +169,18 @@ enum {
 };
 
 enum {
+	PON_A_EVENT_DEV_ID = 1,
+	PON_A_EVENT_TYPE,
+	PON_A_EVENT_ALLOC_ID,
+	PON_A_EVENT_DEPTH,
+	PON_A_EVENT_IMAGE,
+	PON_A_EVENT_CALLS,
+
+	__PON_A_EVENT_MAX,
+	PON_A_EVENT_MAX = (__PON_A_EVENT_MAX - 1)
+};
+
+enum {
 	PON_CMD_DEV_GET = 1,
 	PON_CMD_DEV_SET,
 	PON_CMD_DEV_ADD_NTF,
@@ -155,6 +206,7 @@ enum {
 	PON_CMD_OMCI_REGISTER,
 	PON_CMD_OMCI_TX,
 	PON_CMD_OMCI_NTF,
+	PON_CMD_EVENT_NTF,
 
 	__PON_CMD_MAX,
 	PON_CMD_MAX = (__PON_CMD_MAX - 1)

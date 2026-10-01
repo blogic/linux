@@ -33,6 +33,49 @@ definitions:
     entries: [unknown, o1, o2, o3, o4, o5, o6, o7]
   -
     type: enum
+    name: event-type
+    doc: |
+      Discrete events reported by the driver, each one a thing that
+      happened rather than a state. A PLOAM transition goes through
+      ploam-ntf.
+    entries:
+      -
+        name: mib-reset-req
+        doc: The OLT requested an OMCI MIB reset (reboot request, depth 0).
+      -
+        name: reboot-req
+        doc: The OLT requested an ONU reboot. The depth attribute says how
+          deep, the image attribute which image to run after it and the
+          calls attribute on which condition.
+      -
+        name: tcont-alloc
+        doc: The OLT allocated a T-CONT. The alloc-id attribute names it.
+      -
+        name: tcont-dealloc
+        doc: |
+          The OLT deallocated an alloc-id with Assign_Alloc-ID of ITU-T
+          G.9807.1. The alloc-id attribute names it. Its GEM ports carry no
+          upstream traffic until the OLT allocates it again.
+  -
+    type: enum
+    name: reboot-calls
+    doc: |
+      The condition on calls in progress that a reboot request carries, as
+      the flags of the Reboot_ONU message of ITU-T G.9807.1 (Table C.11.23A,
+      octet 16) define it. The kernel does not know the call state. The
+      userspace that acts on the request applies the condition.
+    entries:
+      -
+        name: any
+        doc: Reboot regardless of the POTS or VoIP call state.
+      -
+        name: no-calls
+        doc: Reboot only if no POTS or VoIP call is in progress.
+      -
+        name: no-emergency-calls
+        doc: Reboot only if no emergency call is in progress.
+  -
+    type: enum
     name: gem-dir
     doc: |
       GEM port direction. The values are those of the direction attribute of
@@ -277,6 +320,55 @@ attribute-sets:
         type: binary
         checks:
           max-len: 1976
+  -
+    name: event
+    attributes:
+      -
+        name: dev-id
+        doc: PON device ID.
+        type: u32
+        checks:
+          min: 1
+      -
+        name: type
+        doc: What happened.
+        type: u32
+        enum: event-type
+      -
+        name: alloc-id
+        doc: |
+          The Alloc-ID the OLT allocated or deallocated. Present for
+          tcont-alloc and tcont-dealloc only.
+        type: u32
+        checks:
+          max: 16383
+      -
+        name: depth
+        doc: |
+          How deep a reboot the OLT asked for, as the reboot depth of the
+          Reboot_ONU message of ITU-T G.9807.1, Table C.11.23A, defines
+          it. Present for reboot-req only.
+        type: u32
+        checks:
+          max: 3
+      -
+        name: image
+        doc: |
+          Which image to run after the reboot, as the reboot image of the
+          Reboot_ONU message of ITU-T G.9807.1, Table C.11.23A, defines it:
+          0 for the image that is committed now, 1 for the other one.
+          Present for reboot-req only.
+        type: u32
+        checks:
+          max: 1
+      -
+        name: calls
+        doc: |
+          On which condition the reboot may run, as the flags of the
+          Reboot_ONU message of ITU-T G.9807.1, Table C.11.23A, define it.
+          Present for reboot-req and mib-reset-req.
+        type: u32
+        enum: reboot-calls
 
 operations:
   list:
@@ -351,7 +443,6 @@ operations:
         attributes:
           - id
           - ploam-state
-
     -
       name: tcont-get
       doc: |
@@ -593,6 +684,20 @@ operations:
         attributes:
           - dev-id
           - pdu
+
+    -
+      name: event-ntf
+      doc: A discrete driver event.
+      attribute-set: event
+      mcgrp: state
+      event:
+        attributes:
+          - dev-id
+          - type
+          - alloc-id
+          - depth
+          - image
+          - calls
 
 mcast-groups:
   list:

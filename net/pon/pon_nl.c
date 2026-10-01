@@ -565,6 +565,79 @@ err_free:
 }
 
 /**
+ * pon_nl_event_arg_put() - put the argument of an event into a notification
+ * @ntf: the notification
+ * @ev: the event
+ *
+ * Each event type names its argument, so the reader does not decode one
+ * number two ways. The alloc-id comes from the Assign_Alloc-ID message of
+ * ITU-T G.9807.1 clause C.11.3.3.7. The depth, the image and the call
+ * condition come from the Reboot_ONU message of G.9807.1 clause C.11.3.3.19.
+ * A MIB reset carries the call condition only.
+ *
+ * Return: 0, or non-zero when the attributes do not fit.
+ */
+static int pon_nl_event_arg_put(struct sk_buff *ntf, const struct pon_event *ev)
+{
+	switch (ev->type) {
+	case PON_EVENT_TYPE_TCONT_ALLOC:
+	case PON_EVENT_TYPE_TCONT_DEALLOC:
+		return nla_put_u32(ntf, PON_A_EVENT_ALLOC_ID, ev->alloc_id);
+	case PON_EVENT_TYPE_REBOOT_REQ:
+		return nla_put_u32(ntf, PON_A_EVENT_DEPTH, ev->reboot.depth) ||
+		       nla_put_u32(ntf, PON_A_EVENT_IMAGE, ev->reboot.image) ||
+		       nla_put_u32(ntf, PON_A_EVENT_CALLS, ev->reboot.calls);
+	case PON_EVENT_TYPE_MIB_RESET_REQ:
+		return nla_put_u32(ntf, PON_A_EVENT_CALLS, ev->reboot.calls);
+	default:
+		return 0;
+	}
+}
+
+/**
+ * pon_nl_notify_event() - send an event notification
+ * @pdev: the PON device
+ * @ev: the event
+ *
+ * Sends PON_CMD_EVENT_NTF to the state group. pon_dev_event() decides what
+ * an event means.
+ *
+ * Context: Called with @pdev->lock held. May sleep.
+ */
+void pon_nl_notify_event(struct pon_dev *pdev, const struct pon_event *ev)
+{
+	struct net *net = dev_net(pdev->main_netdev);
+	struct sk_buff *ntf;
+	void *hdr;
+
+	lockdep_assert_held(&pdev->lock);
+
+	if (!genl_has_listeners(&pon_nl_family, net, PON_NLGRP_STATE))
+		return;
+
+	ntf = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (!ntf)
+		return;
+
+	hdr = genlmsg_put(ntf, 0, 0, &pon_nl_family, 0, PON_CMD_EVENT_NTF);
+	if (!hdr)
+		goto err_free;
+
+	if (nla_put_u32(ntf, PON_A_EVENT_DEV_ID, pdev->id) ||
+	    nla_put_u32(ntf, PON_A_EVENT_TYPE, ev->type) ||
+	    pon_nl_event_arg_put(ntf, ev))
+		goto err_free;
+
+	genlmsg_end(ntf, hdr);
+	genlmsg_multicast_netns(&pon_nl_family, net, ntf, 0, PON_NLGRP_STATE,
+				GFP_KERNEL);
+	return;
+
+err_free:
+	nlmsg_free(ntf);
+}
+
+/**
  * pon_nl_obj_gen_inc() - move the object generation
  *
  * Called whenever an object joins or leaves a list, so that an object dump
