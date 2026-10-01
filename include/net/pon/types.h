@@ -143,6 +143,23 @@ struct pon_gem_map_cfg {
 };
 
 /**
+ * struct pon_gem_stats - counters for one GEM port
+ * @rx_frames: GEM frames received
+ * @rx_bytes: GEM payload bytes received
+ * @tx_frames: GEM frames sent
+ * @tx_bytes: GEM payload bytes sent
+ *
+ * The core zeroes the struct before the call and the driver fills what it
+ * counts.
+ */
+struct pon_gem_stats {
+	u64 rx_frames;
+	u64 rx_bytes;
+	u64 tx_frames;
+	u64 tx_bytes;
+};
+
+/**
  * struct pon_event - a discrete event a driver reports
  * @type: what happened, enum pon_event_type
  * @alloc_id: the Alloc-ID the OLT allocated or deallocated, for tcont-alloc
@@ -346,8 +363,8 @@ struct pon_dev {
 /**
  * struct pon_dev_ops - netdev driver facing PON callbacks
  *
- * tcont_set, tcont_clear, gem_add, gem_del and omci_xmit are mandatory. The
- * others may be NULL and the core then answers -EOPNOTSUPP.
+ * tcont_set, tcont_clear, gem_add, gem_del, gem_stats and omci_xmit are
+ * mandatory. The others may be NULL and the core then answers -EOPNOTSUPP.
  *
  * Every callback runs in process context and may sleep, except where its own
  * description says otherwise. The ones that configure or read the device run
@@ -425,6 +442,13 @@ struct pon_dev_ops {
 	 */
 	int (*gem_del)(struct pon_dev *pdev, u16 gem_id,
 		       struct netlink_ext_ack *extack);
+
+	/**
+	 * @gem_stats: read the counters of one GEM port
+	 * Instance lock held.
+	 */
+	int (*gem_stats)(struct pon_dev *pdev, u16 gem_id,
+			 struct pon_gem_stats *stats);
 
 	/**
 	 * @gem_xmit: send one frame on a GEM port, optional. Consumes the skb

@@ -34,6 +34,9 @@ int pon_nl_gem_map_new_doit(struct sk_buff *skb, struct genl_info *info);
 int pon_nl_gem_map_del_doit(struct sk_buff *skb, struct genl_info *info);
 int pon_nl_omci_register_doit(struct sk_buff *skb, struct genl_info *info);
 int pon_nl_omci_tx_doit(struct sk_buff *skb, struct genl_info *info);
+int pon_nl_gem_stats_get_doit(struct sk_buff *skb, struct genl_info *info);
+int pon_nl_gem_stats_get_dumpit(struct sk_buff *skb,
+				struct netlink_callback *cb);
 
 enum {
 	PON_NLGRP_MGMT,

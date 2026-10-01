@@ -300,6 +300,7 @@ it. Every object can be listed, watched and read back:
 ``tcont-get``      T-CONTs, with a dump
 ``gem-get``        GEM ports, with a dump
 ``gem-map-get``    classifier rules, a dump
+``gem-stats-get``  per GEM port counters, with a dump
 =================  ==============================================
 
 Notifications share the reply format of the matching get, so a listener parses
@@ -308,8 +309,8 @@ is no sequence number: a listener that overruns its socket re-reads.
 ``dev-del-ntf`` stands for the removal of every object of that device. The
 objects go without a notification of their own.
 
-The dumps of the T-CONTs, the GEM ports and the classifier rules take an
-optional device ID and then list the objects of that device only. A
+The dumps of the T-CONTs, the GEM ports, the classifier rules and the counters
+take an optional device ID and then list the objects of that device only. A
 device ID that names no device ends the dump with ``-ENODEV``. A dump that
 does not fit one message resumes by count, so the kernel sets
 ``NLM_F_DUMP_INTR`` when an object joined or left a list in between and the

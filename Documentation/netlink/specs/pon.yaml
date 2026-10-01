@@ -298,6 +298,38 @@ attribute-sets:
         checks:
           max: 63
   -
+    name: gem-stats
+    attributes:
+      -
+        name: dev-id
+        doc: PON device ID.
+        type: u32
+        checks:
+          min: 1
+      -
+        name: gem-id
+        doc: GEM port the counters belong to, 1021 to 65534 as for gem id.
+        type: u32
+        checks:
+          min: 1021
+          max: 65534
+      -
+        name: rx-frames
+        doc: GEM frames received.
+        type: uint
+      -
+        name: rx-bytes
+        doc: GEM payload bytes received.
+        type: uint
+      -
+        name: tx-frames
+        doc: GEM frames sent.
+        type: uint
+      -
+        name: tx-bytes
+        doc: GEM payload bytes sent.
+        type: uint
+  -
     name: omci
     attributes:
       -
@@ -642,7 +674,6 @@ operations:
       notify: gem-map-get
       mcgrp: mgmt
 
-
     -
       name: omci-register
       doc: |
@@ -698,6 +729,33 @@ operations:
           - depth
           - image
           - calls
+
+    -
+      name: gem-stats-get
+      doc: |
+        Get the counters of one GEM port, or dump all of them. A dump with a
+        device ID lists the GEM ports of that device only.
+      attribute-set: gem-stats
+      do:
+        request:
+          attributes:
+            - dev-id
+            - gem-id
+        reply: &gem-stats-all
+          attributes:
+            - dev-id
+            - gem-id
+            - rx-frames
+            - rx-bytes
+            - tx-frames
+            - tx-bytes
+        pre: pon-device-get-locked
+        post: pon-device-unlock
+      dump:
+        request:
+          attributes:
+            - dev-id
+        reply: *gem-stats-all
 
 mcast-groups:
   list:

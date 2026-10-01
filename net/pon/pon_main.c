@@ -222,6 +222,7 @@ struct pon_dev *pon_dev_create(struct net_device *netdev,
 		    !ops->tcont_clear ||
 		    !ops->gem_add ||
 		    !ops->gem_del ||
+		    !ops->gem_stats ||
 		    !ops->omci_xmit))
 		return ERR_PTR(-EINVAL);
 

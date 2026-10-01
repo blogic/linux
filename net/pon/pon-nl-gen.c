@@ -30,6 +30,11 @@ static const struct netlink_range_validation pon_a_gem_map_gem_id_range = {
 	.max	= 65534ULL,
 };
 
+static const struct netlink_range_validation pon_a_gem_stats_gem_id_range = {
+	.min	= 1021ULL,
+	.max	= 65534ULL,
+};
+
 /* PON_CMD_DEV_GET - do */
 static const struct nla_policy pon_dev_get_nl_policy[PON_A_DEV_ID + 1] = {
 	[PON_A_DEV_ID] = NLA_POLICY_MIN(NLA_U32, 1),
@@ -128,6 +133,17 @@ static const struct nla_policy pon_omci_register_nl_policy[PON_A_OMCI_DEV_ID + 1
 static const struct nla_policy pon_omci_tx_nl_policy[PON_A_OMCI_PDU + 1] = {
 	[PON_A_OMCI_DEV_ID] = NLA_POLICY_MIN(NLA_U32, 1),
 	[PON_A_OMCI_PDU] = NLA_POLICY_MAX_LEN(1976),
+};
+
+/* PON_CMD_GEM_STATS_GET - do */
+static const struct nla_policy pon_gem_stats_get_do_nl_policy[PON_A_GEM_STATS_GEM_ID + 1] = {
+	[PON_A_GEM_STATS_DEV_ID] = NLA_POLICY_MIN(NLA_U32, 1),
+	[PON_A_GEM_STATS_GEM_ID] = NLA_POLICY_FULL_RANGE(NLA_U32, &pon_a_gem_stats_gem_id_range),
+};
+
+/* PON_CMD_GEM_STATS_GET - dump */
+static const struct nla_policy pon_gem_stats_get_dump_nl_policy[PON_A_GEM_STATS_DEV_ID + 1] = {
+	[PON_A_GEM_STATS_DEV_ID] = NLA_POLICY_MIN(NLA_U32, 1),
 };
 
 /* Ops table for pon */
@@ -265,6 +281,22 @@ static const struct genl_split_ops pon_nl_ops[] = {
 		.policy		= pon_omci_tx_nl_policy,
 		.maxattr	= PON_A_OMCI_PDU,
 		.flags		= GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd		= PON_CMD_GEM_STATS_GET,
+		.pre_doit	= pon_device_get_locked,
+		.doit		= pon_nl_gem_stats_get_doit,
+		.post_doit	= pon_device_unlock,
+		.policy		= pon_gem_stats_get_do_nl_policy,
+		.maxattr	= PON_A_GEM_STATS_GEM_ID,
+		.flags		= GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd		= PON_CMD_GEM_STATS_GET,
+		.dumpit		= pon_nl_gem_stats_get_dumpit,
+		.policy		= pon_gem_stats_get_dump_nl_policy,
+		.maxattr	= PON_A_GEM_STATS_DEV_ID,
+		.flags		= GENL_CMD_CAP_DUMP,
 	},
 };
 

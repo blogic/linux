@@ -193,6 +193,7 @@ int pon_device_get_locked(const struct genl_split_ops *ops,
 	BUILD_BUG_ON((int)PON_A_DEV_ID != (int)PON_A_TCONT_DEV_ID ||
 		     (int)PON_A_DEV_ID != (int)PON_A_GEM_DEV_ID ||
 		     (int)PON_A_DEV_ID != (int)PON_A_GEM_MAP_DEV_ID ||
+		     (int)PON_A_DEV_ID != (int)PON_A_GEM_STATS_DEV_ID ||
 		     (int)PON_A_DEV_ID != (int)PON_A_OMCI_DEV_ID);
 
 	if (!id) {
@@ -1545,6 +1546,113 @@ int pon_nl_gem_map_del_doit(struct sk_buff *skb, struct genl_info *info)
 	pon_nl_obj_gen_inc();
 
 	return 0;
+}
+
+/* Counters */
+
+/**
+ * pon_nl_gem_stats_fill() - put the counters of one GEM port into an skb
+ * @pdev: the PON device
+ * @gem: the GEM port
+ * @rsp: the skb to fill
+ * @info: the request, or the dump info
+ *
+ * The frame and byte counters are those of the GEM port network CTP
+ * performance monitoring history data of ITU-T G.988 clause 9.2.13.
+ *
+ * Context: Called with @pdev->lock held.
+ * Return: 0, the error of the gem_stats op, or -EMSGSIZE when the message
+ * does not fit.
+ */
+static int
+pon_nl_gem_stats_fill(struct pon_dev *pdev, struct pon_gem *gem,
+		      struct sk_buff *rsp, const struct genl_info *info)
+{
+	struct pon_gem_stats stats = {};
+	void *hdr;
+	int err;
+
+	err = pdev->ops->gem_stats(pdev, gem->cfg.id, &stats);
+	if (err)
+		return err;
+
+	hdr = genlmsg_iput(rsp, info);
+	if (!hdr)
+		return -EMSGSIZE;
+
+	if (nla_put_u32(rsp, PON_A_GEM_STATS_DEV_ID, pdev->id) ||
+	    nla_put_u32(rsp, PON_A_GEM_STATS_GEM_ID, gem->cfg.id) ||
+	    nla_put_uint(rsp, PON_A_GEM_STATS_RX_FRAMES, stats.rx_frames) ||
+	    nla_put_uint(rsp, PON_A_GEM_STATS_RX_BYTES, stats.rx_bytes) ||
+	    nla_put_uint(rsp, PON_A_GEM_STATS_TX_FRAMES, stats.tx_frames) ||
+	    nla_put_uint(rsp, PON_A_GEM_STATS_TX_BYTES, stats.tx_bytes))
+		goto err_cancel_msg;
+
+	genlmsg_end(rsp, hdr);
+	return 0;
+
+err_cancel_msg:
+	genlmsg_cancel(rsp, hdr);
+	return -EMSGSIZE;
+}
+
+/**
+ * pon_nl_gem_stats_fill_pos() - pon_nl_obj_fill_t for the GEM port counters
+ * @pdev: the PON device
+ * @pos: the list entry of the GEM port
+ * @rsp: the skb to fill
+ * @info: the dump info
+ *
+ * Return: the result of pon_nl_gem_stats_fill().
+ */
+static int pon_nl_gem_stats_fill_pos(struct pon_dev *pdev,
+				     struct list_head *pos,
+				     struct sk_buff *rsp,
+				     const struct genl_info *info)
+{
+	return pon_nl_gem_stats_fill(pdev,
+				     list_entry(pos, struct pon_gem, list),
+				     rsp, info);
+}
+
+/**
+ * pon_nl_gem_stats_get_doit() - handle PON_CMD_GEM_STATS_GET for one GEM port
+ * @skb: the request
+ * @info: the request info, user_ptr[0] holds the device
+ *
+ * Context: Called with the device lock held by pon_device_get_locked().
+ * Return: 0, -ENOENT when the GEM port does not exist, or a negative errno.
+ */
+int pon_nl_gem_stats_get_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct pon_dev *pdev = info->user_ptr[0];
+	struct nlattr *gem_id = info->attrs[PON_A_GEM_STATS_GEM_ID];
+	struct pon_gem *gem;
+
+	if (GENL_REQ_ATTR_CHECK(info, PON_A_GEM_STATS_GEM_ID))
+		return -EINVAL;
+
+	gem = pon_gem_find(pdev, nla_get_u32(gem_id));
+	if (!gem) {
+		NL_SET_ERR_MSG(info->extack, "no such GEM port");
+		return -ENOENT;
+	}
+
+	return pon_nl_obj_reply(info, &gem->list, pon_nl_gem_stats_fill_pos);
+}
+
+/**
+ * pon_nl_gem_stats_get_dumpit() - handle the PON_CMD_GEM_STATS_GET dump
+ * @rsp: the skb to fill
+ * @cb: the dump state
+ *
+ * Return: the result of pon_nl_obj_dumpit().
+ */
+int pon_nl_gem_stats_get_dumpit(struct sk_buff *rsp,
+				struct netlink_callback *cb)
+{
+	return pon_nl_obj_dumpit(rsp, cb, offsetof(struct pon_dev, gems),
+				 pon_nl_gem_stats_fill_pos);
 }
 
 /**
