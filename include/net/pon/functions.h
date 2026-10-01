@@ -8,6 +8,8 @@
 #include <linux/rcupdate.h>
 #include <net/pon/types.h>
 
+struct ethtool_fec_stats;
+struct ethtool_fecparam;
 struct pon_dev;
 struct pon_dev_caps;
 struct pon_dev_ops;
@@ -65,6 +67,8 @@ int pon_dev_state_report(struct pon_dev *pdev,
 			 enum pon_ploam_state state);
 __printf(2, 3) void pon_dev_log(struct pon_dev *pdev, const char *fmt, ...);
 void pon_dev_event(struct pon_dev *pdev, const struct pon_event *ev);
+void pon_dev_fec_stats(struct pon_dev *pdev, struct ethtool_fec_stats *stats);
+int pon_dev_fec_param(struct pon_dev *pdev, struct ethtool_fecparam *fec);
 
 int pon_conduit_register(struct net_device *conduit,
 			 const struct pon_conduit_ops *ops);

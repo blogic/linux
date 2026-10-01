@@ -97,6 +97,12 @@ void pon_nl_notify_gem_map(struct pon_dev *pdev, struct pon_gem_map *map,
 			   u32 cmd);
 
 void pon_dev_carrier_update(struct pon_dev *pdev);
+int pon_dev_fec_refresh(struct pon_dev *pdev);
+
+#define PON_FEC_FOLD_INTERVAL	(10 * HZ)
+
+void pon_fec_init(struct pon_dev *pdev);
+void pon_fec_start(struct pon_dev *pdev);
 
 /* ITU-T G.988 clause 11.2.5 and Table 11.2-2: header and length are 10
  * bytes and a PDU is at most 1980 bytes including the 4 byte MIC.

@@ -248,6 +248,7 @@ struct pon_dev *pon_dev_create(struct net_device *netdev,
 	INIT_WORK(&pdev->work, pon_work_worker);
 	INIT_WORK(&pdev->tc_work, pon_dev_tc_work);
 	pon_log_init(pdev);
+	pon_fec_init(pdev);
 	refcount_set(&pdev->refcnt, 1);
 
 	/* Ordered, so that the work items run one at a time and in the order
@@ -276,6 +277,8 @@ struct pon_dev *pon_dev_create(struct net_device *netdev,
 	pon_nl_notify_dev(pdev, PON_CMD_DEV_ADD_NTF);
 
 	rcu_assign_pointer(netdev->pon_dev, pdev);
+
+	pon_fec_start(pdev);
 
 	mutex_unlock(&pdev->lock);
 
@@ -374,6 +377,7 @@ void pon_dev_unregister(struct pon_dev *pdev)
 	pon_nl_notify_dev(pdev, PON_CMD_DEV_DEL_NTF);
 
 	WRITE_ONCE(pdev->going_away, true);
+	pon_delayed_work_cancel(pdev, &pdev->fec_work);
 	mutex_unlock(&pdev->lock);
 
 	rtnl_lock();

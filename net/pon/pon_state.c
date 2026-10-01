@@ -2,6 +2,8 @@
 /* Copyright (C) 2026 John Crispin <john@phrozen.org> */
 
 #include <linux/bits.h>
+#include <linux/ethtool.h>
+#include <linux/jiffies.h>
 #include <linux/netdevice.h>
 #include <linux/sprintf.h>
 #include <linux/stdarg.h>
@@ -413,3 +415,162 @@ void pon_dev_event(struct pon_dev *pdev, const struct pon_event *ev)
 	pon_nl_notify_event(pdev, ev);
 }
 EXPORT_SYMBOL_GPL(pon_dev_event);
+
+/**
+ * pon_dev_fec_refresh() - fold the driver's FEC counters into the totals
+ * @pdev:	PON device structure
+ *
+ * The driver's counters are 32 bits and wrap. The totals here do not. Folds
+ * one read of the driver's counters into the totals, under the instance lock.
+ * The counters are those of the FEC PM history data ME, ITU-T G.988 clause
+ * 9.2.9.
+ *
+ * The driver keeps the counters continuous across activation edges, so a
+ * counter that went backwards wrapped. @pdev->fec.rebase, set only when the
+ * device is created, takes the first reading as the baseline and adds
+ * nothing, so the totals start at zero rather than at whatever the hardware
+ * happens to hold.
+ *
+ * Context: Called with @pdev->lock held.
+ * Return: 0, -EOPNOTSUPP when the driver is gone or reports no FEC counters,
+ * or the driver's errno.
+ */
+int pon_dev_fec_refresh(struct pon_dev *pdev)
+{
+	struct pon_fec_totals *fec = &pdev->fec;
+	const struct pon_fec_stats *last = &fec->last;
+	struct pon_fec_stats now = {};
+	int err;
+
+	lockdep_assert_held(&pdev->lock);
+
+	if (!pdev->ops || !pdev->ops->fec_stats)
+		return -EOPNOTSUPP;
+
+	err = pdev->ops->fec_stats(pdev, &now);
+	if (err)
+		return err;
+
+	if (fec->rebase) {
+		fec->rebase = false;
+	} else {
+		fec->corrected_bytes +=
+			(u32)(now.corrected_bytes - last->corrected_bytes);
+		fec->corrected_codewords +=
+			(u32)(now.corrected_codewords -
+			      last->corrected_codewords);
+		fec->uncorrectable_codewords +=
+			(u32)(now.uncorrectable_codewords -
+			      last->uncorrectable_codewords);
+		fec->total_codewords +=
+			(u32)(now.total_codewords - last->total_codewords);
+		fec->seconds += (u32)(now.seconds - last->seconds);
+	}
+
+	fec->last = now;
+
+	return 0;
+}
+
+/**
+ * pon_fec_fold_work() - fold the FEC counters and re-arm the fold
+ * @pdev:	PON device structure
+ * @work:	the instance's @fec_work
+ *
+ * Runs every PON_FEC_FOLD_INTERVAL, so the totals stay exact while no
+ * counter of the driver advances by 2^32 or more between two folds.
+ *
+ * Context: The instance's context, with @pdev->lock held.
+ */
+static void pon_fec_fold_work(struct pon_dev *pdev, struct pon_work *work)
+{
+	pon_dev_fec_refresh(pdev);
+	pon_fec_start(pdev);
+}
+
+/**
+ * pon_fec_init() - prepare the FEC totals of a new PON device
+ * @pdev:	PON device structure
+ *
+ * Marks the first reading as the baseline and sets up the periodic fold.
+ *
+ * Context: From pon_dev_create(), before the device is published.
+ */
+void pon_fec_init(struct pon_dev *pdev)
+{
+	pdev->fec.rebase = true;
+	pon_delayed_work_init(&pdev->fec_work, pon_fec_fold_work);
+}
+
+/**
+ * pon_fec_start() - arm the next fold of the FEC counters
+ * @pdev:	PON device structure
+ *
+ * Queues pon_fec_fold_work() after PON_FEC_FOLD_INTERVAL when the driver
+ * reports FEC counters and does nothing otherwise.
+ *
+ * Context: Called with @pdev->lock held.
+ */
+void pon_fec_start(struct pon_dev *pdev)
+{
+	if (pdev->ops->fec_stats)
+		pon_delayed_work_queue(pdev, &pdev->fec_work,
+				       PON_FEC_FOLD_INTERVAL);
+}
+
+/**
+ * pon_dev_fec_stats() - the downstream FEC counters, for ethtool
+ * @pdev:	PON device structure
+ * @stats:	filled with the corrected and the uncorrectable codeword totals
+ *
+ * For the data interface's ethtool_ops::get_fec_stats. Takes the instance
+ * lock, so not for the instance's own context. The fields stay unset when
+ * the driver reports no FEC counters.
+ */
+void pon_dev_fec_stats(struct pon_dev *pdev, struct ethtool_fec_stats *stats)
+{
+	mutex_lock(&pdev->lock);
+	if (!pon_dev_fec_refresh(pdev)) {
+		stats->corrected_blocks.total = pdev->fec.corrected_codewords;
+		stats->uncorrectable_blocks.total =
+			pdev->fec.uncorrectable_codewords;
+	}
+	mutex_unlock(&pdev->lock);
+}
+EXPORT_SYMBOL_GPL(pon_dev_fec_stats);
+
+/**
+ * pon_dev_fec_param() - the downstream FEC in use, for ethtool
+ * @pdev:	PON device structure
+ * @fec:	filled with the configured and the active encoding
+ *
+ * For the data interface's ethtool_ops::get_fecparam. In XGS-PON the
+ * downstream FEC is RS(248,216) and is configured on for every ONU
+ * (G.9807.1 clause C.10.1.3), so the encoding follows from the mode alone
+ * and is active once the receiver has left O1. Before the driver's first
+ * report the state is unknown and the encoding counts as inactive. Takes the
+ * instance lock, so not for the instance's own context.
+ *
+ * Return: 0, or -EOPNOTSUPP for a mode whose downstream FEC the OLT
+ * controls, which no driver reports yet.
+ */
+int pon_dev_fec_param(struct pon_dev *pdev, struct ethtool_fecparam *fec)
+{
+	int err = 0;
+
+	mutex_lock(&pdev->lock);
+	switch (pdev->mode) {
+	case PON_MODE_XGS_PON:
+		fec->fec = ETHTOOL_FEC_RS;
+		fec->active_fec = pdev->ploam > PON_PLOAM_STATE_O1 ?
+				  ETHTOOL_FEC_RS : ETHTOOL_FEC_NONE;
+		break;
+	default:
+		err = -EOPNOTSUPP;
+		break;
+	}
+	mutex_unlock(&pdev->lock);
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(pon_dev_fec_param);

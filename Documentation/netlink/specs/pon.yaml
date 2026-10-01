@@ -402,6 +402,37 @@ attribute-sets:
         type: u32
         enum: reboot-calls
 
+  -
+    name: fec
+    attributes:
+      -
+        name: dev-id
+        doc: PON device ID.
+        type: u32
+        checks:
+          min: 1
+      -
+        name: corrected
+        doc: FEC corrected codewords, monotonic.
+        type: uint
+      -
+        name: uncorrectable
+        doc: FEC uncorrectable codewords, monotonic.
+        type: uint
+      -
+        name: corrected-bytes
+        doc: FEC corrected bytes, monotonic.
+        type: uint
+      -
+        name: total-codewords
+        doc: Codewords received, monotonic.
+        type: uint
+      -
+        name: seconds
+        doc: |
+          Seconds in which at least one uncorrectable FEC codeword was
+          received (ITU-T G.988 clause 9.2.9), monotonic.
+        type: uint
 operations:
   list:
     -
@@ -756,6 +787,28 @@ operations:
           attributes:
             - dev-id
         reply: *gem-stats-all
+
+    -
+      name: fec-get
+      doc: |
+        Get the FEC counters of one device. They belong to the device and
+        not to a GEM port, so there is no dump. Enumerate the devices with
+        dev-get.
+      attribute-set: fec
+      do:
+        request:
+          attributes:
+            - dev-id
+        reply:
+          attributes:
+            - dev-id
+            - corrected
+            - uncorrectable
+            - corrected-bytes
+            - total-codewords
+            - seconds
+        pre: pon-device-get-locked
+        post: pon-device-unlock
 
 mcast-groups:
   list:

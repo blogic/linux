@@ -194,6 +194,7 @@ int pon_device_get_locked(const struct genl_split_ops *ops,
 		     (int)PON_A_DEV_ID != (int)PON_A_GEM_DEV_ID ||
 		     (int)PON_A_DEV_ID != (int)PON_A_GEM_MAP_DEV_ID ||
 		     (int)PON_A_DEV_ID != (int)PON_A_GEM_STATS_DEV_ID ||
+		     (int)PON_A_DEV_ID != (int)PON_A_FEC_DEV_ID ||
 		     (int)PON_A_DEV_ID != (int)PON_A_OMCI_DEV_ID);
 
 	if (!id) {
@@ -1613,6 +1614,77 @@ static int pon_nl_gem_stats_fill_pos(struct pon_dev *pdev,
 	return pon_nl_gem_stats_fill(pdev,
 				     list_entry(pos, struct pon_gem, list),
 				     rsp, info);
+}
+
+/**
+ * pon_nl_fec_fill() - put the FEC counters of a device into an skb
+ * @pdev: the PON device
+ * @rsp: the skb to fill
+ * @info: the request info
+ *
+ * Folds the driver's counters first. The counters are those of the FEC
+ * performance monitoring history data of ITU-T G.988 clause 9.2.9.
+ *
+ * Context: Called with @pdev->lock held.
+ * Return: 0, the error of pon_dev_fec_refresh(), or -EMSGSIZE when the
+ * message does not fit.
+ */
+static int
+pon_nl_fec_fill(struct pon_dev *pdev, struct sk_buff *rsp,
+		const struct genl_info *info)
+{
+	struct pon_fec_totals *fec = &pdev->fec;
+	void *hdr;
+	int err;
+
+	err = pon_dev_fec_refresh(pdev);
+	if (err)
+		return err;
+
+	hdr = genlmsg_iput(rsp, info);
+	if (!hdr)
+		return -EMSGSIZE;
+
+	if (nla_put_u32(rsp, PON_A_FEC_DEV_ID, pdev->id) ||
+	    nla_put_uint(rsp, PON_A_FEC_CORRECTED,
+			 fec->corrected_codewords) ||
+	    nla_put_uint(rsp, PON_A_FEC_UNCORRECTABLE,
+			 fec->uncorrectable_codewords) ||
+	    nla_put_uint(rsp, PON_A_FEC_CORRECTED_BYTES,
+			 fec->corrected_bytes) ||
+	    nla_put_uint(rsp, PON_A_FEC_TOTAL_CODEWORDS,
+			 fec->total_codewords) ||
+	    nla_put_uint(rsp, PON_A_FEC_SECONDS, fec->seconds))
+		goto err_cancel_msg;
+
+	genlmsg_end(rsp, hdr);
+	return 0;
+
+err_cancel_msg:
+	genlmsg_cancel(rsp, hdr);
+	return -EMSGSIZE;
+}
+
+/**
+ * pon_nl_fec_get_doit() - handle PON_CMD_FEC_GET
+ * @skb: the request
+ * @info: the request info, user_ptr[0] holds the device
+ *
+ * Context: Called with the device lock held by pon_device_get_locked().
+ * Return: 0, -EOPNOTSUPP when the driver has no fec_stats callback, or a
+ * negative errno.
+ */
+int pon_nl_fec_get_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct pon_dev *pdev = info->user_ptr[0];
+
+	if (!pdev->ops->fec_stats) {
+		NL_SET_ERR_MSG(info->extack,
+			       "the driver reports no FEC counters");
+		return -EOPNOTSUPP;
+	}
+
+	return pon_nl_dev_reply(info, pon_nl_fec_fill);
 }
 
 /**

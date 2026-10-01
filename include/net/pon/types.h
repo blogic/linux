@@ -186,6 +186,52 @@ struct pon_event {
 };
 
 /**
+ * struct pon_fec_stats - downstream FEC counters, whole device
+ * @corrected_bytes: bytes the FEC decoder corrected
+ * @corrected_codewords: codewords the FEC decoder corrected
+ * @uncorrectable_codewords: codewords the FEC decoder could not correct
+ * @total_codewords: codewords received
+ * @seconds: seconds in which at least one uncorrectable codeword was
+ *	received (ITU-T G.988 clause 9.2.9, FEC seconds)
+ *
+ * The core zeroes the struct before the call and the driver fills what it
+ * counts. The counters are 32 bits wide and wrap. The driver keeps them
+ * continuous across activation edges and resets of the hardware, so a counter
+ * goes back only when it wraps. The core folds them into 64 bit totals on
+ * every read and every ten seconds while the device is registered, which is
+ * exact as long as each counter advances by fewer than 2^32 increments between
+ * two folds.
+ */
+struct pon_fec_stats {
+	u32 corrected_bytes;
+	u32 corrected_codewords;
+	u32 uncorrectable_codewords;
+	u32 total_codewords;
+	u32 seconds;
+};
+
+/**
+ * struct pon_fec_totals - the FEC counters accumulated to 64 bits
+ * @corrected_bytes: see struct pon_fec_stats
+ * @corrected_codewords: see struct pon_fec_stats
+ * @uncorrectable_codewords: see struct pon_fec_stats
+ * @total_codewords: see struct pon_fec_stats
+ * @seconds: see struct pon_fec_stats
+ * @last: the counters as the driver last reported them
+ * @rebase: take the next reading as the baseline and add nothing, set only
+ *	    when the device is created
+ */
+struct pon_fec_totals {
+	u64 corrected_bytes;
+	u64 corrected_codewords;
+	u64 uncorrectable_codewords;
+	u64 total_codewords;
+	u64 seconds;
+	struct pon_fec_stats last;
+	bool rebase;
+};
+
+/**
  * struct pon_dev_caps - what the device supports
  * @modes: bitmask of enum pon_mode the hardware can run
  * @max_tconts: number of T-CONTs
@@ -279,6 +325,10 @@ struct pon_conduit_ops {
  *	      it up unchecked
  * @omci_rx_work: has the driver verify the unchecked PDUs of @omci_rxq and
  *		  hands every PDU to the owner of the OMCI channel
+ * @fec: the FEC counters accumulated across the driver's 32 bit wraps
+ * @fec_work: folds the driver's FEC counters into @fec every ten seconds
+ *	      while the device is registered, when the driver has a fec_stats
+ *	      callback
  * @identity: the serial number as dev-set last delivered it, which dev-get
  *	      reports. The registration id goes to the driver and is not kept
  * @identity.serial: serial number, valid when @identity.serial_set
@@ -353,6 +403,8 @@ struct pon_dev {
 	unsigned int log_head;
 	unsigned int log_count;
 	unsigned int log_dropped;
+	struct pon_fec_totals fec;
+	struct pon_delayed_work fec_work;
 	struct work_struct tc_work;
 	DECLARE_BITMAP(ets_stale, PON_TX_CHANNELS);
 	bool going_away;
@@ -449,6 +501,14 @@ struct pon_dev_ops {
 	 */
 	int (*gem_stats)(struct pon_dev *pdev, u16 gem_id,
 			 struct pon_gem_stats *stats);
+
+	/**
+	 * @fec_stats: read the whole-device FEC counters
+	 * The counters are continuous: a driver whose hardware clears them at
+	 * a link event or a reset adds what they held before, so a counter
+	 * goes back only when it wraps. Instance lock held.
+	 */
+	int (*fec_stats)(struct pon_dev *pdev, struct pon_fec_stats *stats);
 
 	/**
 	 * @gem_xmit: send one frame on a GEM port, optional. Consumes the skb

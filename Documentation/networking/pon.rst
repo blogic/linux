@@ -301,6 +301,7 @@ it. Every object can be listed, watched and read back:
 ``gem-get``        GEM ports, with a dump
 ``gem-map-get``    classifier rules, a dump
 ``gem-stats-get``  per GEM port counters, with a dump
+``fec-get``        the FEC counters of one device
 =================  ==============================================
 
 Notifications share the reply format of the matching get, so a listener parses
@@ -315,6 +316,14 @@ device ID that names no device ends the dump with ``-ENODEV``. A dump that
 does not fit one message resumes by count, so the kernel sets
 ``NLM_F_DUMP_INTR`` when an object joined or left a list in between and the
 reader repeats the dump.
+
+``fec-get`` returns the FEC totals of a device, folded to 64 bits from
+whatever width the PHY latches. The core folds them every ten seconds, so a
+reader needs no fixed read interval. They belong to the device and not to a
+GEM port, which is why they are a separate operation with no dump. Enumerate
+the devices with ``dev-get``. The same totals reach ``ethtool --show-fec`` on
+the data interface as corrected and uncorrectable blocks, beside the encoding
+in use, so a reader without the family sees them too.
 
 ``omci-register``, ``omci-tx`` and ``omci-ntf`` are the OMCI channel, described
 above. ``omci-ntf`` goes to the owner of the channel alone and to no
