@@ -145,6 +145,16 @@ handler runs with the instance lock held, so it may sleep. One worker drains
 the list one item at a time, so the ordering a driver sees is the order it
 queued in.
 
+A driver arms its activation timers as ``pon_delayed_work``, so their handlers
+run in the same context. ``pon_work_cancel()`` and
+``pon_delayed_work_cancel()`` must be called with the instance lock held,
+which is what a state machine needs: a state transition stops its own timers
+and drops its own queued items from inside the handler the same lock
+protects. ``cancel_delayed_work_sync()`` would deadlock there, because the
+handler it waits for needs the same lock. When the driver tears down, after
+``pon_dev_unregister()`` or before the instance exists, it ends each delayed
+item with ``pon_delayed_work_shutdown()``, which takes no lock.
+
 The OMCI channel
 ================
 

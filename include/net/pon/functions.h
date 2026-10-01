@@ -16,6 +16,14 @@ struct sk_buff;
 #if IS_ENABLED(CONFIG_PON)
 
 void pon_work_queue(struct pon_dev *pdev, struct pon_work *work);
+void pon_work_cancel(struct pon_dev *pdev, struct pon_work *work);
+void pon_delayed_work_timer(struct timer_list *timer);
+void pon_delayed_work_queue(struct pon_dev *pdev,
+			    struct pon_delayed_work *dwork,
+			    unsigned long delay);
+void pon_delayed_work_cancel(struct pon_dev *pdev,
+			     struct pon_delayed_work *dwork);
+void pon_delayed_work_shutdown(struct pon_delayed_work *dwork);
 
 /**
  * pon_work_init() - prepare a work item
@@ -28,6 +36,21 @@ static inline void pon_work_init(struct pon_work *work, pon_work_func_t func)
 {
 	INIT_LIST_HEAD(&work->entry);
 	work->func = func;
+}
+
+/**
+ * pon_delayed_work_init() - prepare a delayed work item
+ * @dwork: the item
+ * @func: the handler that runs once the delay passes
+ *
+ * Sets up the timer and the work item. pon_delayed_work_queue() sets the
+ * instance the item belongs to.
+ */
+static inline void pon_delayed_work_init(struct pon_delayed_work *dwork,
+					 pon_work_func_t func)
+{
+	timer_setup(&dwork->timer, pon_delayed_work_timer, 0);
+	pon_work_init(&dwork->work, func);
 }
 
 struct pon_dev *pon_dev_create(struct net_device *netdev,

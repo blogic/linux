@@ -217,7 +217,7 @@ struct pon_dev *pon_dev_create(struct net_device *netdev,
 
 	/* Ordered, so that the work items run one at a time and in the order
 	 * they were queued. High priority, because the activation and key
-	 * exchange timers whose handlers a driver runs on it are short.
+	 * exchange timers a driver arms on it are short.
 	 */
 	pdev->wq = alloc_ordered_workqueue("pon-%s", WQ_HIGHPRI, netdev->name);
 	if (!pdev->wq) {
@@ -286,6 +286,8 @@ static void pon_dev_free(struct pon_dev *pdev)
  * A driver drops the reference pon_dev_create() returned, once, after
  * pon_dev_unregister() and after it has released everything of its own that
  * names the device: its interrupts, its timers and the data network device.
+ * A delayed work item it armed through pon_delayed_work_queue() is released
+ * with pon_delayed_work_shutdown().
  */
 void pon_dev_put(struct pon_dev *pdev)
 {

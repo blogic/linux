@@ -10,6 +10,7 @@
 #include <linux/refcount.h>
 #include <linux/skbuff.h>
 #include <linux/spinlock.h>
+#include <linux/timer.h>
 #include <linux/workqueue.h>
 #include <linux/xarray.h>
 #include <net/pon/ploam.h>
@@ -39,6 +40,21 @@ typedef void (*pon_work_func_t)(struct pon_dev *pdev, struct pon_work *work);
 struct pon_work {
 	struct list_head entry;
 	pon_work_func_t func;
+};
+
+/**
+ * struct pon_delayed_work - a work item that runs after a delay
+ * @work: the work item
+ * @pdev: the instance it belongs to
+ * @timer: fires and queues @work
+ *
+ * The timer callback only queues, so the handler itself never runs in softirq
+ * context. That is what takes an activation timer off the softirq path.
+ */
+struct pon_delayed_work {
+	struct pon_work work;
+	struct pon_dev *pdev;
+	struct timer_list timer;
 };
 
 /* The wire defines these, so they come from the PLOAM vocabulary. */
