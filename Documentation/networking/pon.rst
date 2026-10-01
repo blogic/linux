@@ -323,6 +323,10 @@ does not fit one message resumes by count, so the kernel sets
 ``NLM_F_DUMP_INTR`` when an object joined or left a list in between and the
 reader repeats the dump.
 
+``dev-get`` also carries the response time the MAC applies, in nanoseconds,
+when the driver can report it. The OMCI daemon answers the ANI-G attribute
+from it.
+
 ``fec-get`` returns the FEC totals of a device, folded to 64 bits from
 whatever width the PHY latches. The core folds them every ten seconds, so a
 reader needs no fixed read interval. They belong to the device and not to a

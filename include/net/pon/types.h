@@ -648,6 +648,13 @@ struct pon_dev_ops {
 	int (*tc_stats)(struct pon_dev *pdev, struct pon_tc_stats *stats);
 
 	/**
+	 * @response_time: the ONU response time the MAC applies, in
+	 *		   nanoseconds, optional. Without it the device reports
+	 *		   no response time. Instance lock held.
+	 */
+	int (*response_time)(struct pon_dev *pdev, u32 *ns);
+
+	/**
 	 * @gem_xmit: send one frame on a GEM port, optional. Consumes the skb
 	 *	      whatever it returns. Without it a GEM network device
 	 *	      drops what it is given. Runs from ndo_start_xmit of the

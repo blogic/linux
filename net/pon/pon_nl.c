@@ -284,6 +284,9 @@ pon_device_unlock(const struct genl_split_ops *ops, struct sk_buff *skb,
  * @rsp: the skb to fill
  * @info: the request, or the notification info
  *
+ * The response time is the ONU response time of ITU-T G.988 clause 9.2.1,
+ * present only when the driver reports it.
+ *
  * Context: Called with @pdev->lock held.
  * Return: 0, or -EMSGSIZE when the message does not fit.
  */
@@ -310,6 +313,14 @@ pon_nl_dev_fill(struct pon_dev *pdev, struct sk_buff *rsp,
 	    nla_put(rsp, PON_A_DEV_SERIAL, PON_SERIAL_LEN,
 		    pdev->identity.serial))
 		goto err_cancel_msg;
+
+	if (pdev->ops->response_time) {
+		u32 ns;
+
+		if (!pdev->ops->response_time(pdev, &ns) &&
+		    nla_put_u32(rsp, PON_A_DEV_RESPONSE_TIME, ns))
+			goto err_cancel_msg;
+	}
 
 	if (nla_put_u8(rsp, PON_A_DEV_ENABLE, pdev->enabled))
 		goto err_cancel_msg;

@@ -207,6 +207,13 @@ attribute-sets:
         type: u8
         checks:
           max: 1
+      -
+        name: response-time
+        doc: |
+          ONU response time, T_resp, in nanoseconds, as the MAC applies it.
+          ITU-T G.988 reports it through the ANI-G managed entity. Absent
+          when the device cannot report it.
+        type: u32
   -
     name: tcont
     attributes:
@@ -660,6 +667,7 @@ operations:
             - ploam-state
             - max-tconts
             - max-gems
+            - response-time
             - enable
         pre: pon-device-get-locked
         post: pon-device-unlock
