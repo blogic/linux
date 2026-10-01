@@ -13,8 +13,8 @@ many ONUs over a shared fiber. Downstream is a broadcast the ONU filters.
 Upstream is time division multiple access and an ONU may only transmit inside
 the windows the OLT grants it.
 
-The subsystem implements ITU-T G.9807.1 (XGS-PON): the PLOAM codec and the
-identifier ranges are those of G.9807.1. The uapi also
+The subsystem implements ITU-T G.9807.1 (XGS-PON): the PLOAM codec, the
+identifier ranges and the alarm set are those of G.9807.1. The uapi also
 reserves the modes of G.984 (GPON) and G.987 (XG-PON) for later drivers, as
 well as the activation state o3 of G.984.3. The core implements none of those
 systems. A device lists the modes it supports in its capabilities. The core
@@ -42,11 +42,15 @@ GEM port
   GEM port (equal to the ONU-ID, OMCI only) and 65535 for the idle GEM port,
   so the uapi takes only 1021 to 65534.
 
-One more object supports them:
+Two more objects support them:
 
 Classifier rule
   What upstream traffic maps onto which GEM port, matched on VLAN tag state,
   VLAN id, priority or DSCP.
+
+Alarm
+  An ONU defect. Alarms are levels, not edges: the driver raises one while the
+  condition holds and clears it when it ends.
 
 Activation
 ==========
@@ -300,6 +304,7 @@ it. Every object can be listed, watched and read back:
 ``tcont-get``      T-CONTs, with a dump
 ``gem-get``        GEM ports, with a dump
 ``gem-map-get``    classifier rules, a dump
+``alarm-get``      the raised alarms, with a dump
 ``gem-stats-get``  per GEM port counters, with a dump
 ``fec-get``        the FEC counters of one device
 ``tc-stats-get``   the TC layer counters of one device
@@ -342,10 +347,11 @@ the reply, which is how a reader tells it from a counter that stands at zero.
 above. ``omci-ntf`` goes to the owner of the channel alone and to no
 multicast group.
 
-``ploam-ntf`` reports every activation transition. ``event-ntf`` reports the
-things that genuinely happen once rather than lasting: a MIB reset request, a
-reboot request and the assignment and the deallocation of an alloc-id. Each
-type names its arguments, ``depth`` and ``image`` for the reboot request and
+``ploam-ntf`` reports every activation transition. ``alarm-ntf`` sends the
+whole alarm bitmap on every change. ``event-ntf`` reports the things that
+genuinely happen once rather than lasting: a MIB reset request, a reboot
+request and the assignment and the deallocation of an alloc-id. Each type
+names its arguments, ``depth`` and ``image`` for the reboot request and
 ``alloc-id`` for the alloc-id events, so a reader does not decode one number
 two ways.
 
@@ -384,6 +390,9 @@ The kernel-internal interfaces, pulled from the source.
 
 .. kernel-doc:: net/pon/pon_work.c
    :doc: The lent context
+
+.. kernel-doc:: net/pon/pon_alarm.c
+   :doc: Alarms
 
 .. kernel-doc:: include/net/pon/ploam.h
    :doc: The PLOAM vocabulary

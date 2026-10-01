@@ -37,7 +37,8 @@ enum pon_ploam_state {
 
 /**
  * enum pon_event_type - Discrete events reported by the driver, each one a
- *   thing that happened rather than a state. A PLOAM transition goes through
+ *   thing that happened rather than a state. A condition that lasts is an
+ *   alarm and goes through alarm-ntf and a PLOAM transition goes through
  *   ploam-ntf.
  * @PON_EVENT_TYPE_MIB_RESET_REQ: The OLT requested an OMCI MIB reset (reboot
  *   request, depth 0).
@@ -110,6 +111,18 @@ enum pon_gem_key_ring {
 enum pon_gem_map_tag {
 	PON_GEM_MAP_TAG_UNTAGGED,
 	PON_GEM_MAP_TAG_TAGGED,
+};
+
+/**
+ * enum pon_alarm - ONU defects of ITU-T G.9807.1 Table C.14.3. Each one is a
+ *   level, not an edge: the driver raises it while the condition holds and
+ *   clears it when the condition ends, so a lost notification costs nothing
+ *   and alarm-get always carries the truth.
+ * @PON_ALARM_LODS: Loss of downstream synchronization: the downstream
+ *   synchronization state machine is in the Hunt or Pre-Sync state.
+ */
+enum pon_alarm {
+	PON_ALARM_LODS,
 };
 
 enum {
@@ -248,6 +261,14 @@ enum {
 };
 
 enum {
+	PON_A_ALARM_DEV_ID = 1,
+	PON_A_ALARM_ALARMS,
+
+	__PON_A_ALARM_MAX,
+	PON_A_ALARM_MAX = (__PON_A_ALARM_MAX - 1)
+};
+
+enum {
 	PON_CMD_DEV_GET = 1,
 	PON_CMD_DEV_SET,
 	PON_CMD_DEV_ADD_NTF,
@@ -277,6 +298,8 @@ enum {
 	PON_CMD_GEM_STATS_GET,
 	PON_CMD_FEC_GET,
 	PON_CMD_TC_STATS_GET,
+	PON_CMD_ALARM_GET,
+	PON_CMD_ALARM_NTF,
 
 	__PON_CMD_MAX,
 	PON_CMD_MAX = (__PON_CMD_MAX - 1)

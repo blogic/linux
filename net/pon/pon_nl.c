@@ -241,6 +241,7 @@ int pon_device_get_locked(const struct genl_split_ops *ops,
 		     (int)PON_A_DEV_ID != (int)PON_A_GEM_STATS_DEV_ID ||
 		     (int)PON_A_DEV_ID != (int)PON_A_FEC_DEV_ID ||
 		     (int)PON_A_DEV_ID != (int)PON_A_TC_STATS_DEV_ID ||
+		     (int)PON_A_DEV_ID != (int)PON_A_ALARM_DEV_ID ||
 		     (int)PON_A_DEV_ID != (int)PON_A_OMCI_DEV_ID);
 
 	if (!id) {
@@ -1877,6 +1878,116 @@ int pon_nl_gem_stats_get_dumpit(struct sk_buff *rsp,
 {
 	return pon_nl_obj_dumpit(rsp, cb, offsetof(struct pon_dev, gems),
 				 pon_nl_gem_stats_fill_pos);
+}
+
+/* Alarms */
+
+/**
+ * pon_nl_alarm_fill() - put the alarm bitmap of a device into an skb
+ * @pdev: the PON device
+ * @rsp: the skb to fill
+ * @info: the request, or the dump info
+ *
+ * Context: Called with @pdev->lock held.
+ * Return: 0, or -EMSGSIZE when the message does not fit.
+ */
+static int pon_nl_alarm_fill(struct pon_dev *pdev, struct sk_buff *rsp,
+			     const struct genl_info *info)
+{
+	void *hdr;
+
+	hdr = genlmsg_iput(rsp, info);
+	if (!hdr)
+		return -EMSGSIZE;
+
+	if (nla_put_u32(rsp, PON_A_ALARM_DEV_ID, pdev->id) ||
+	    nla_put_u32(rsp, PON_A_ALARM_ALARMS, READ_ONCE(pdev->alarms))) {
+		genlmsg_cancel(rsp, hdr);
+		return -EMSGSIZE;
+	}
+
+	genlmsg_end(rsp, hdr);
+	return 0;
+}
+
+/**
+ * pon_nl_notify_alarm() - send the alarm notification
+ * @pdev: the PON device
+ *
+ * Sends PON_CMD_ALARM_NTF to the state group, in the format of the
+ * alarm-get reply. The whole bitmap goes out on every change, so a listener
+ * that misses a notification is correct again after the next one and never
+ * has to ask.
+ *
+ * Context: Called with @pdev->lock held. May sleep.
+ */
+void pon_nl_notify_alarm(struct pon_dev *pdev)
+{
+	struct net *net = dev_net(pdev->main_netdev);
+	struct genl_info info;
+	struct sk_buff *ntf;
+
+	lockdep_assert_held(&pdev->lock);
+
+	if (!genl_has_listeners(&pon_nl_family, net, PON_NLGRP_STATE))
+		return;
+
+	ntf = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (!ntf)
+		return;
+
+	genl_info_init_ntf(&info, &pon_nl_family, PON_CMD_ALARM_NTF);
+	genl_info_net_set(&info, net);
+	if (pon_nl_alarm_fill(pdev, ntf, &info)) {
+		nlmsg_free(ntf);
+		return;
+	}
+
+	genlmsg_multicast_netns(&pon_nl_family, net, ntf, 0, PON_NLGRP_STATE,
+				GFP_KERNEL);
+}
+
+/**
+ * pon_nl_alarm_get_doit() - handle PON_CMD_ALARM_GET for one device
+ * @skb: the request
+ * @info: the request info, user_ptr[0] holds the device
+ *
+ * Context: Called with the device lock held by pon_device_get_locked().
+ * Return: 0, or a negative errno.
+ */
+int pon_nl_alarm_get_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	return pon_nl_dev_reply(info, pon_nl_alarm_fill);
+}
+
+/**
+ * pon_nl_alarm_get_dumpit() - handle the PON_CMD_ALARM_GET dump
+ * @rsp: the skb to fill
+ * @cb: the dump state, args[0] is the next device id
+ *
+ * Dumps the alarms of every device in the namespace of the requesting
+ * socket.
+ *
+ * Context: Takes pon_devs_lock and each device lock in turn.
+ * Return: 0, or -EMSGSIZE when the skb is full and the dump resumes.
+ */
+int pon_nl_alarm_get_dumpit(struct sk_buff *rsp, struct netlink_callback *cb)
+{
+	struct pon_dev *pdev;
+	int err = 0;
+
+	mutex_lock(&pon_devs_lock);
+	xa_for_each_start(&pon_devs, cb->args[0], pdev, cb->args[0]) {
+		mutex_lock(&pdev->lock);
+		if (dev_net(pdev->main_netdev) == sock_net(rsp->sk))
+			err = pon_nl_alarm_fill(pdev, rsp, genl_info_dump(cb));
+		mutex_unlock(&pdev->lock);
+		if (err)
+			break;
+	}
+	mutex_unlock(&pon_devs_lock);
+
+	return err;
 }
 
 /**

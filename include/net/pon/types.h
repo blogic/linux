@@ -25,6 +25,7 @@ struct sk_buff;
 
 #define PON_LOG_LINES		16
 #define PON_LOG_LINE_LEN	64
+#define PON_ALARM_COUNT		(PON_ALARM_LODS + 1)
 #define PON_TX_CHANNELS		(U8_MAX + 1)
 
 typedef void (*pon_work_func_t)(struct pon_dev *pdev, struct pon_work *work);
@@ -408,7 +409,8 @@ struct pon_conduit_ops {
  * @caps: device capabilities
  * @drv_priv: driver priv pointer
  * @lock: instance lock and the driver's upcalls. It protects every field
- *	  below it, with these exceptions. @conduit is @pon_devs_lock's. The
+ *	  below it, with these exceptions. @alarms changes with atomic bit
+ *	  operations from hard interrupt. @conduit is @pon_devs_lock's. The
  *	  OMCI fields name their own rules. @ploam and @going_away are
  *	  written under the lock and read without it through READ_ONCE()
  * @refcnt: reference count for the instance
@@ -416,6 +418,10 @@ struct pon_conduit_ops {
  * @mode: active mode, enum pon_mode
  * @ploam: activation state as the driver last reported it
  * @enabled: the upstream link was last started rather than stopped
+ * @alarms: the ONU alarms raised now, one bit per enum pon_alarm, changed
+ *	    with atomic bit operations so that a driver may report from any
+ *	    context
+ * @alarm_work: publishes @alarms once the instance's context is available
  * @omci_portid: netlink port id of the socket that owns the OMCI channel, 0
  *		 when none does, changed with cmpxchg, because a socket that
  *		 closes gives it up without the lock
@@ -489,6 +495,7 @@ struct pon_dev {
 	enum pon_mode mode;
 	enum pon_ploam_state ploam;
 	bool enabled;
+	unsigned long alarms;
 	struct {
 		u8 serial[PON_SERIAL_LEN];
 		bool serial_set;
@@ -505,6 +512,7 @@ struct pon_dev {
 	/* guards @work_list, taken from hard interrupt */
 	spinlock_t work_lock;
 
+	struct pon_work alarm_work;
 	u32 omci_portid;
 	struct sk_buff_head omci_rxq;
 	struct pon_work omci_rx_work;

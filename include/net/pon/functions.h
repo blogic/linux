@@ -67,6 +67,7 @@ int pon_dev_state_report(struct pon_dev *pdev,
 			 enum pon_ploam_state state);
 __printf(2, 3) void pon_dev_log(struct pon_dev *pdev, const char *fmt, ...);
 void pon_dev_event(struct pon_dev *pdev, const struct pon_event *ev);
+void pon_dev_alarm_set(struct pon_dev *pdev, u32 alarm, bool raised);
 void pon_dev_fec_stats(struct pon_dev *pdev, struct ethtool_fec_stats *stats);
 int pon_dev_fec_param(struct pon_dev *pdev, struct ethtool_fecparam *fec);
 

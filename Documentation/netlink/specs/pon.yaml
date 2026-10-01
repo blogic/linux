@@ -36,7 +36,8 @@ definitions:
     name: event-type
     doc: |
       Discrete events reported by the driver, each one a thing that
-      happened rather than a state. A PLOAM transition goes through
+      happened rather than a state. A condition that lasts is an alarm and
+      goes through alarm-ntf and a PLOAM transition goes through
       ploam-ntf.
     entries:
       -
@@ -124,6 +125,20 @@ definitions:
     doc: VLAN tag state an upstream classifier rule matches.
     entries: [untagged, tagged]
 
+  -
+    type: enum
+    name: alarm
+    doc: |
+      ONU defects of ITU-T G.9807.1 Table C.14.3. Each one is a level, not
+      an edge: the driver raises it while the condition holds and clears it
+      when the condition ends, so a lost notification costs nothing and
+      alarm-get always carries the truth.
+    entries:
+      -
+        name: lods
+        doc: |
+          Loss of downstream synchronization: the downstream
+          synchronization state machine is in the Hunt or Pre-Sync state.
 attribute-sets:
   -
     name: dev
@@ -609,6 +624,22 @@ attribute-sets:
           OMCI PDUs from the registered socket that the MAC refused,
           monotonic.
         type: uint
+  -
+    name: alarm
+    attributes:
+      -
+        name: dev-id
+        doc: PON device ID.
+        type: u32
+        checks:
+          min: 1
+      -
+        name: alarms
+        doc: Bitmask of the alarms raised now.
+        type: u32
+        enum: alarm
+        enum-as-flags: true
+
 operations:
   list:
     -
@@ -1042,6 +1073,30 @@ operations:
             - omci-tx-errors
         pre: pon-device-get-locked
         post: pon-device-unlock
+
+    -
+      name: alarm-get
+      doc: Get the alarms raised on one device, or dump every device.
+      attribute-set: alarm
+      do:
+        request:
+          attributes:
+            - dev-id
+        reply: &alarm-all
+          attributes:
+            - dev-id
+            - alarms
+        pre: pon-device-get-locked
+        post: pon-device-unlock
+      dump:
+        reply: *alarm-all
+    -
+      name: alarm-ntf
+      doc: |
+        The set of raised alarms changed. The whole bitmap is sent, so a
+        reader that misses one notification is still correct after the next.
+      notify: alarm-get
+      mcgrp: state
 
 mcast-groups:
   list:

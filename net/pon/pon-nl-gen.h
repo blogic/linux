@@ -39,6 +39,8 @@ int pon_nl_gem_stats_get_dumpit(struct sk_buff *skb,
 				struct netlink_callback *cb);
 int pon_nl_fec_get_doit(struct sk_buff *skb, struct genl_info *info);
 int pon_nl_tc_stats_get_doit(struct sk_buff *skb, struct genl_info *info);
+int pon_nl_alarm_get_doit(struct sk_buff *skb, struct genl_info *info);
+int pon_nl_alarm_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb);
 
 enum {
 	PON_NLGRP_MGMT,

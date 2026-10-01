@@ -156,6 +156,11 @@ static const struct nla_policy pon_tc_stats_get_nl_policy[PON_A_TC_STATS_DEV_ID 
 	[PON_A_TC_STATS_DEV_ID] = NLA_POLICY_MIN(NLA_U32, 1),
 };
 
+/* PON_CMD_ALARM_GET - do */
+static const struct nla_policy pon_alarm_get_nl_policy[PON_A_ALARM_DEV_ID + 1] = {
+	[PON_A_ALARM_DEV_ID] = NLA_POLICY_MIN(NLA_U32, 1),
+};
+
 /* Ops table for pon */
 static const struct genl_split_ops pon_nl_ops[] = {
 	{
@@ -325,6 +330,20 @@ static const struct genl_split_ops pon_nl_ops[] = {
 		.policy		= pon_tc_stats_get_nl_policy,
 		.maxattr	= PON_A_TC_STATS_DEV_ID,
 		.flags		= GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd		= PON_CMD_ALARM_GET,
+		.pre_doit	= pon_device_get_locked,
+		.doit		= pon_nl_alarm_get_doit,
+		.post_doit	= pon_device_unlock,
+		.policy		= pon_alarm_get_nl_policy,
+		.maxattr	= PON_A_ALARM_DEV_ID,
+		.flags		= GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd	= PON_CMD_ALARM_GET,
+		.dumpit	= pon_nl_alarm_get_dumpit,
+		.flags	= GENL_CMD_CAP_DUMP,
 	},
 };
 

@@ -90,11 +90,14 @@ void pon_nl_obj_gen_inc(void);
 void pon_nl_notify_dev(struct pon_dev *pdev, u32 cmd);
 void pon_nl_notify_ploam(struct pon_dev *pdev);
 void pon_nl_notify_event(struct pon_dev *pdev, const struct pon_event *ev);
+void pon_nl_notify_alarm(struct pon_dev *pdev);
 void pon_nl_notify_tcont(struct pon_dev *pdev, struct pon_tcont *tcont,
 			 u32 cmd);
 void pon_nl_notify_gem(struct pon_dev *pdev, struct pon_gem *gem, u32 cmd);
 void pon_nl_notify_gem_map(struct pon_dev *pdev, struct pon_gem_map *map,
 			   u32 cmd);
+
+void pon_alarm_init(struct pon_dev *pdev);
 
 void pon_dev_carrier_update(struct pon_dev *pdev);
 int pon_dev_fec_refresh(struct pon_dev *pdev);

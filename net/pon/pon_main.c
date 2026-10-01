@@ -247,6 +247,7 @@ struct pon_dev *pon_dev_create(struct net_device *netdev,
 	INIT_LIST_HEAD(&pdev->work_list);
 	INIT_WORK(&pdev->work, pon_work_worker);
 	INIT_WORK(&pdev->tc_work, pon_dev_tc_work);
+	pon_alarm_init(pdev);
 	pon_log_init(pdev);
 	pon_fec_init(pdev);
 	refcount_set(&pdev->refcnt, 1);

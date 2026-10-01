@@ -413,7 +413,9 @@ EXPORT_SYMBOL_GPL(pon_dev_state_report);
  * @pdev:	PON device structure
  * @ev:		what happened and the arguments of its type
  *
- * Runs in the instance's context, with its lock held.
+ * Runs in the instance's context, with its lock held. A condition that
+ * lasts is an alarm, not an event. pon_dev_alarm_set() is the upcall
+ * that a driver may call from any context.
  *
  * A tcont-alloc event means the driver bound the alloc-id to a channel, so
  * the GEM ports that ride it carry traffic from then on: the carrier may
