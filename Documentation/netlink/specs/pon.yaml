@@ -224,6 +224,36 @@ attribute-sets:
           again before it starts the link. Only the OLT takes the ONU out of
           the state, so dev-set has no way to clear it.
         type: flag
+      -
+        name: msk
+        doc: |
+          Master session key of an OMCI authentication, ITU-T G.988 clause
+          9.13.11: the 16 bytes of AES-CMAC(PSK, OLT_challenge |
+          ONU_challenge). Write only: it is a key and no reply or
+          notification carries it.
+        type: binary
+        checks:
+          exact-len: 16
+      -
+        name: bcast-key-index
+        doc: |
+          Key index of a broadcast key, as the XGEM header of an encrypted
+          multicast frame carries it (ITU-T G.9807.1 clause C.15.4.2): 1 or
+          2. Index 0 means cleartext and 3 is reserved.
+        type: u32
+        checks:
+          min: 1
+          max: 2
+      -
+        name: bcast-key
+        doc: |
+          Broadcast key of a key index as the OLT wrote it into the
+          broadcast key table of ITU-T G.988 clause 9.13.11: 16 bytes,
+          encrypted with AES-ECB under the KEK (ITU-T G.9807.1 clause
+          C.15.5.4). Write only: no reply or notification carries it.
+        type: binary
+        checks:
+          exact-len: 16
   -
     name: tcont
     attributes:
@@ -287,7 +317,8 @@ attribute-sets:
         name: key-ring
         doc: |
           Encryption key ring of the GEM port. Absent means none. The
-          kernel refuses broadcast, since it takes no broadcast key.
+          kernel refuses broadcast when the driver takes no broadcast key
+          (bcast-key-set).
         type: u32
         enum: gem-key-ring
   -
@@ -1118,6 +1149,42 @@ operations:
         reader that misses one notification is still correct after the next.
       notify: alarm-get
       mcgrp: state
+    -
+      name: msk-set
+      doc: |
+        Hand the master session key of an OMCI authentication (ITU-T G.988
+        clause 9.13.11) to the PON MAC, which derives its session key,
+        integrity keys and KEK from it (ITU-T G.9807.1 clause C.15.3.3). The
+        OMCI integrity key switches at once, the PLOAM integrity key and the
+        KEK with the next Registration (clause C.15.8.2). Refused with
+        ENETDOWN outside O5.
+      attribute-set: dev
+      flags: [admin-perm]
+      do:
+        request:
+          attributes:
+            - id
+            - msk
+        pre: pon-device-get-locked
+        post: pon-device-unlock
+    -
+      name: bcast-key-set
+      doc: |
+        Install the broadcast key of a key index, which decrypts the
+        multicast GEM ports of key ring 2 (ITU-T G.988 clause 9.2.3), or
+        clear the index when bcast-key is absent. Installing a key is
+        refused with ENETDOWN outside O5, since the KEK that decrypts it
+        exists only then. Clearing is not.
+      attribute-set: dev
+      flags: [admin-perm]
+      do:
+        request:
+          attributes:
+            - id
+            - bcast-key-index
+            - bcast-key
+        pre: pon-device-get-locked
+        post: pon-device-unlock
 
 mcast-groups:
   list:

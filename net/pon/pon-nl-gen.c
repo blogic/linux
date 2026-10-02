@@ -162,6 +162,19 @@ static const struct nla_policy pon_alarm_get_nl_policy[PON_A_ALARM_DEV_ID + 1] =
 	[PON_A_ALARM_DEV_ID] = NLA_POLICY_MIN(NLA_U32, 1),
 };
 
+/* PON_CMD_MSK_SET - do */
+static const struct nla_policy pon_msk_set_nl_policy[PON_A_DEV_MSK + 1] = {
+	[PON_A_DEV_ID] = NLA_POLICY_MIN(NLA_U32, 1),
+	[PON_A_DEV_MSK] = NLA_POLICY_EXACT_LEN(16),
+};
+
+/* PON_CMD_BCAST_KEY_SET - do */
+static const struct nla_policy pon_bcast_key_set_nl_policy[PON_A_DEV_BCAST_KEY + 1] = {
+	[PON_A_DEV_ID] = NLA_POLICY_MIN(NLA_U32, 1),
+	[PON_A_DEV_BCAST_KEY_INDEX] = NLA_POLICY_RANGE(NLA_U32, 1, 2),
+	[PON_A_DEV_BCAST_KEY] = NLA_POLICY_EXACT_LEN(16),
+};
+
 /* Ops table for pon */
 static const struct genl_split_ops pon_nl_ops[] = {
 	{
@@ -345,6 +358,24 @@ static const struct genl_split_ops pon_nl_ops[] = {
 		.cmd	= PON_CMD_ALARM_GET,
 		.dumpit	= pon_nl_alarm_get_dumpit,
 		.flags	= GENL_CMD_CAP_DUMP,
+	},
+	{
+		.cmd		= PON_CMD_MSK_SET,
+		.pre_doit	= pon_device_get_locked,
+		.doit		= pon_nl_msk_set_doit,
+		.post_doit	= pon_device_unlock,
+		.policy		= pon_msk_set_nl_policy,
+		.maxattr	= PON_A_DEV_MSK,
+		.flags		= GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd		= PON_CMD_BCAST_KEY_SET,
+		.pre_doit	= pon_device_get_locked,
+		.doit		= pon_nl_bcast_key_set_doit,
+		.post_doit	= pon_device_unlock,
+		.policy		= pon_bcast_key_set_nl_policy,
+		.maxattr	= PON_A_DEV_BCAST_KEY,
+		.flags		= GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
 	},
 };
 

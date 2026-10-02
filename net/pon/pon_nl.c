@@ -1237,7 +1237,8 @@ static bool pon_gem_cfg_same(const struct pon_gem_cfg *existing,
  *
  * Creates the GEM port of the GEM port network CTP of ITU-T G.988 clause
  * 9.2.3. The policy holds the GEM port ID to the assignable range of ITU-T
- * G.9807.1 Table C.6.6. The broadcast key ring of clause 9.2.3 is refused.
+ * G.9807.1 Table C.6.6. The broadcast key ring of clause 9.2.3 is refused
+ * when the driver takes no broadcast key (the bcast_key_set op).
  * A GEM port with an upstream half names its T-CONT and takes the alloc-id of
  * it. A downstream GEM port names none. A request for a GEM port that exists
  * with the same attributes succeeds and changes nothing.
@@ -1277,7 +1278,8 @@ int pon_nl_gem_new_doit(struct sk_buff *skb, struct genl_info *info)
 	}
 	if (info->attrs[PON_A_GEM_KEY_RING])
 		cfg.key_ring = nla_get_u32(info->attrs[PON_A_GEM_KEY_RING]);
-	if (cfg.key_ring == PON_GEM_KEY_RING_BROADCAST) {
+	if (cfg.key_ring == PON_GEM_KEY_RING_BROADCAST &&
+	    !pdev->ops->bcast_key_set) {
 		NL_SET_ERR_MSG_ATTR(info->extack,
 				    info->attrs[PON_A_GEM_KEY_RING],
 				    "broadcast keys are not supported");
@@ -2219,3 +2221,88 @@ int pon_nl_gem_map_get_dumpit(struct sk_buff *rsp, struct netlink_callback *cb)
 	return pon_nl_obj_dumpit(rsp, cb, offsetof(struct pon_dev, gem_maps),
 				 pon_nl_gem_map_fill_pos);
 }
+
+/* Keys of the OMCI authentication */
+
+/**
+ * pon_nl_msk_set_doit() - handle PON_CMD_MSK_SET
+ * @skb: the request
+ * @info: the request info, user_ptr[0] holds the device
+ *
+ * Hands the master session key of an OMCI authentication (ITU-T G.988 clause
+ * 9.13.11) to the msk_set op. The authentication runs over the OMCC, which
+ * exists in O5 only. The copy of the key on the stack is cleared on every
+ * exit. No reply or notification carries it.
+ *
+ * Context: Called with the device lock held by pon_device_get_locked().
+ * Return: 0, -EINVAL without the key, -EOPNOTSUPP without the op, -ENETDOWN
+ * outside O5, or the error of the op.
+ */
+int pon_nl_msk_set_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct pon_dev *pdev = info->user_ptr[0];
+	u8 msk[PON_KEY_LEN];
+	int err;
+
+	if (GENL_REQ_ATTR_CHECK(info, PON_A_DEV_MSK))
+		return -EINVAL;
+	if (!pdev->ops->msk_set)
+		return -EOPNOTSUPP;
+	if (pdev->ploam != PON_PLOAM_STATE_O5) {
+		NL_SET_ERR_MSG(info->extack,
+			       "a master session key is taken in O5 only");
+		return -ENETDOWN;
+	}
+
+	nla_memcpy(msk, info->attrs[PON_A_DEV_MSK], sizeof(msk));
+	err = pdev->ops->msk_set(pdev, msk, info->extack);
+	memzero_explicit(msk, sizeof(msk));
+
+	return err;
+}
+
+/**
+ * pon_nl_bcast_key_set_doit() - handle PON_CMD_BCAST_KEY_SET
+ * @skb: the request
+ * @info: the request info, user_ptr[0] holds the device
+ *
+ * Installs the broadcast key of a key index, still encrypted with the KEK as
+ * ITU-T G.9807.1 clause C.15.5.4 has the OLT send it, or clears the index
+ * when the request carries no key. The driver decrypts it with the KEK,
+ * which exists in O5 only, so a key is refused outside O5. A clear is not.
+ * The copy of the key on the stack is cleared on every exit. No reply or
+ * notification carries it.
+ *
+ * Context: Called with the device lock held by pon_device_get_locked().
+ * Return: 0, -EINVAL without the key index, -EOPNOTSUPP without the op,
+ * -ENETDOWN for a key outside O5, or the error of the op.
+ */
+int pon_nl_bcast_key_set_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct pon_dev *pdev = info->user_ptr[0];
+	struct nlattr *attr = info->attrs[PON_A_DEV_BCAST_KEY];
+	u8 key[PON_KEY_LEN];
+	u8 index;
+	int err;
+
+	if (GENL_REQ_ATTR_CHECK(info, PON_A_DEV_BCAST_KEY_INDEX))
+		return -EINVAL;
+	if (!pdev->ops->bcast_key_set)
+		return -EOPNOTSUPP;
+	index = nla_get_u32(info->attrs[PON_A_DEV_BCAST_KEY_INDEX]);
+	if (!attr)
+		return pdev->ops->bcast_key_set(pdev, index, NULL,
+						info->extack);
+	if (pdev->ploam != PON_PLOAM_STATE_O5) {
+		NL_SET_ERR_MSG_ATTR(info->extack, attr,
+				    "a broadcast key is taken in O5 only");
+		return -ENETDOWN;
+	}
+
+	nla_memcpy(key, attr, sizeof(key));
+	err = pdev->ops->bcast_key_set(pdev, index, key, info->extack);
+	memzero_explicit(key, sizeof(key));
+
+	return err;
+}
+

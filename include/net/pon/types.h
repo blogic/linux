@@ -62,6 +62,7 @@ struct pon_delayed_work {
 /* The wire defines these, so they come from the PLOAM vocabulary. */
 #define PON_SERIAL_LEN		PON_PLOAM_SN_LEN
 #define PON_REG_ID_LEN		PON_PLOAM_REG_ID_LEN
+#define PON_KEY_LEN		16
 
 /**
  * struct pon_identity - what dev-set delivers, identity and the settings
@@ -711,6 +712,30 @@ struct pon_dev_ops {
 			   const struct pon_gem_map_cfg *cfg,
 			   struct netlink_ext_ack *extack);
 
+	/**
+	 * @msk_set: take the master session key of an OMCI authentication
+	 *	     (ITU-T G.988 clause 9.13.11) of PON_KEY_LEN bytes. Derive
+	 *	     the session key, the integrity keys and the KEK from it
+	 *	     (ITU-T G.9807.1 clause C.15.3.3). The OMCI integrity key
+	 *	     switches at once, the PLOAM integrity key and the KEK with
+	 *	     the next Registration (clause C.15.8.2). Optional, called
+	 *	     in O5 only. The core keeps no copy of the key. Instance
+	 *	     lock held.
+	 */
+	int (*msk_set)(struct pon_dev *pdev, const u8 *msk,
+		       struct netlink_ext_ack *extack);
+
+	/**
+	 * @bcast_key_set: install the broadcast key of key index 1 or 2,
+	 *		   PON_KEY_LEN bytes encrypted with the KEK (ITU-T
+	 *		   G.9807.1 clause C.15.5.4), or clear the index when
+	 *		   @key is NULL. Optional. Without it the broadcast key
+	 *		   ring is refused at gem-new. A key is installed in O5
+	 *		   only. The core keeps no copy of the key. Instance
+	 *		   lock held.
+	 */
+	int (*bcast_key_set)(struct pon_dev *pdev, u8 index, const u8 *key,
+			     struct netlink_ext_ack *extack);
 };
 
 #endif /* __NET_PON_TYPES_H */

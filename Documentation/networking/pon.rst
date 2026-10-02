@@ -389,12 +389,23 @@ it (G.9807.1 Table C.12.1). In one request with ``enable`` the state is applied
 first: the link starts in O7 with the transmitter off and the ONU listens for
 the OLT to enable it.
 
-No key material crosses this interface in either direction. ``gem-new`` selects
-the key ring of each GEM port, as G.988 clause 9.2.3 defines it. The key
-ring alone decides whether a GEM port is encrypted and in which direction. The
-keys themselves are derived and rotated below. The broadcast key ring is
-refused, because the OLT distributes those keys over the OMCI and the kernel
-takes none.
+``gem-new`` selects the key ring of each GEM port, as G.988 clause 9.2.3
+defines it. The key ring alone decides whether a GEM port is encrypted and in
+which direction. The unicast keys are derived and rotated below and never
+cross this interface.
+
+Two keys come from the management plane, because the OLT sends them over the
+OMCI. They cross the interface only towards the kernel. ``msk-set`` hands
+over the master session key of an OMCI authentication (G.988 clause 9.13.11).
+The driver derives its session key, integrity keys and KEK from it (G.9807.1
+clause C.15.3.3) and switches the OMCI integrity key at once, the PLOAM
+integrity key and the KEK with the next Registration (clause C.15.8.2).
+``bcast-key-set`` installs the broadcast key of key index 1 or 2 as the OLT
+wrote it, encrypted with the KEK (clause C.15.5.4), or clears the index. Both
+are write only: no reply, notification or dump carries a key. Both are refused
+with ``-ENETDOWN`` outside O5, except the clear. A driver without the
+``bcast_key_set`` operation keeps the broadcast key ring refused at
+``gem-new``.
 
 Internals
 =========
